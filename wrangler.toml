@@ -1,0 +1,19 @@
+name = "airescheduler"
+main = "src/index.ts"
+compatibility_date = "2024-11-08"
+compatibility_flags = ["nodejs_compat"]
+
+# D1 Database binding
+[[d1_databases]]
+binding = "AIRESCHEDULER_DB"
+database_name = "AIRESCHEDULER_DB"
+database_id = "a6476b87-4dfb-46f8-b31c-a3707a9c7ce3"
+migrations_dir = "src/db/migrations"
+
+# Workers AI binding
+[ai]
+binding = "AI_MODEL"
+
+# Cron trigger - runs hourly
+[triggers]
+crons = ["0 * * * *"]

@@ -1,0 +1,40 @@
+{
+  "name": "airescheduler",
+  "version": "1.0.0",
+  "description": "AI-powered flight lesson rescheduler using Cloudflare Workers",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "build": "wrangler deploy --dry-run",
+    "build:dashboard": "vite build",
+    "deploy": "wrangler deploy",
+    "lint": "tsc --noEmit",
+    "types": "wrangler types"
+  },
+  "keywords": [
+    "cloudflare-workers",
+    "ai",
+    "scheduling"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@tailwindcss/postcss": "^4.1.17",
+    "@types/node": "^24.10.0",
+    "hono": "^4.10.4",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "@vitejs/plugin-react": "^5.1.0",
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.17",
+    "typescript": "^5.9.3",
+    "vite": "^7.2.2",
+    "wrangler": "^4.46.0"
+  }
+}

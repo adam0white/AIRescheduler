@@ -1,0 +1,6 @@
+# AIRescheduler Local Development Environment Variables
+# Copy this file to .dev.vars and fill in your actual values
+
+# WeatherAPI.com API Key
+# Get your free API key at: https://www.weatherapi.com/signup.aspx
+WEATHER_API_KEY=your_weather_api_key_here

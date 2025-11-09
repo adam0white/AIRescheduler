@@ -1,0 +1,115 @@
+# Quality Gate Decision - Story 1.2: D1 Database Schema & Migrations
+schema: 1
+story: "1.2"
+story_title: "D1 Database Schema & Migrations"
+gate: "PASS"
+status_reason: "All 10 acceptance criteria now PASS. Migration 0003 successfully resolved ISO 8601 datetime format issue. Database implementation is production-ready with excellent schema design, type safety, SQL injection protection, and proper constraint enforcement. All data successfully migrated without loss or regressions."
+reviewer: "Quinn (Test Architect)"
+updated: "2025-11-09T18:30:00Z"
+
+waiver: { active: false }
+
+resolved_issues:
+  - id: "AC-005"
+    severity: high
+    original_finding: "Datetime format not ISO 8601 compliant - using SQLite datetime('now') returns '2025-11-09 18:13:00' instead of '2025-11-09T18:13:00Z'"
+    resolution: "Migration 0003_fix_datetime_format.sql created and applied to both local and remote databases. All 8 tables recreated with strftime('%Y-%m-%dT%H:%M:%fZ', 'now') in DEFAULT clauses. All 11 datetime columns now return ISO 8601 format with milliseconds and Zulu timezone."
+    verified: "2025-11-09T18:30:00Z"
+    verification_notes: "Tested in local database: '2025-11-09T18:22:09.728Z' ✓, remote database: '2025-11-09T18:22:21.855Z' ✓, new record insertion: '2025-11-09T18:25:12.871Z' ✓. Foreign keys preserved, seed data intact."
+    refs: ["src/db/migrations/0003_fix_datetime_format.sql"]
+
+remaining_recommendations:
+  - id: "TEST-001"
+    severity: low
+    finding: "No automated tests created for database schema, migrations, or client helper functions"
+    suggested_action: "Add unit tests for client.ts helper functions and integration tests to validate schema matches TypeScript interfaces. Recommended for future technical debt story but not blocking for story completion."
+    refs: ["src/db/client.ts"]
+
+risk_summary:
+  totals: { critical: 0, high: 0, medium: 0, low: 1 }
+  recommendations:
+    monitor:
+      - "Consider adding test coverage for database layer in future technical debt story"
+    future_improvements:
+      - "Add indexes for common query patterns if performance optimization needed"
+      - "Consider runtime schema validation using Zod or similar"
+
+quality_score: 95
+quality_score_change: "+25 (from 70 to 95 after ISO 8601 fix)"
+expires: "2025-11-23T00:00:00Z"
+
+evidence:
+  tests_reviewed: 0
+  migrations_verified: 3
+  tables_created: 8
+  seed_records: 3
+  datetime_columns_verified: 11
+  foreign_keys_verified: 7
+  trace:
+    ac_covered: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    ac_gaps: []
+
+nfr_validation:
+  security:
+    status: PASS
+    notes: "All query helpers use prepared statements with parameterized queries, preventing SQL injection. Foreign key constraints enforce referential integrity. No sensitive data exposed in error messages."
+
+  performance:
+    status: PASS
+    notes: "Database schema is well-designed with appropriate indexes (PRIMARY KEY, UNIQUE constraints create automatic indexes). No performance concerns identified for expected data volumes."
+
+  reliability:
+    status: PASS
+    notes: "ISO 8601 datetime format correctly implemented via Migration 0003. Foreign key constraints verified after migration. Migration strategy follows immutable pattern with proper data preservation."
+
+  maintainability:
+    status: PASS
+    notes: "TypeScript interfaces perfectly match database schema. Helper functions are well-documented with JSDoc comments and examples. Migration files are clear, well-commented, and follow immutable pattern."
+
+recommendations:
+  completed:
+    - action: "✓ Created migration 0003_fix_datetime_format.sql to use ISO 8601 format"
+      status: "COMPLETED - Applied to both local and remote databases"
+      refs: ["src/db/migrations/0003_fix_datetime_format.sql"]
+    - action: "✓ Updated all datetime DEFAULT clauses to use strftime('%Y-%m-%dT%H:%M:%fZ', 'now')"
+      status: "COMPLETED - All 11 datetime columns across 8 tables"
+      refs: ["src/db/migrations/0003_fix_datetime_format.sql"]
+
+  future:
+    - action: "Add unit tests for all client helper functions"
+      priority: "medium"
+      refs: ["src/db/client.ts"]
+    - action: "Add integration test to validate schema matches TypeScript interfaces"
+      priority: "medium"
+      refs: ["src/db/client.ts"]
+    - action: "Consider adding database migration testing framework"
+      priority: "low"
+      refs: ["src/db/migrations/"]
+    - action: "Add indexes for query optimization if needed (flights.departure_time, flights.status, weather_snapshots.flight_id)"
+      priority: "low"
+      refs: ["src/db/migrations/"]
+
+acceptance_criteria_status:
+  AC1_D1_database_created: PASS
+  AC2_migration_0001_creates_tables: PASS
+  AC3_migration_0002_seeds_thresholds: PASS
+  AC4_foreign_key_constraints: PASS
+  AC5_ISO8601_datetime_format: PASS
+  AC6_migrations_local_applied: PASS
+  AC7_migrations_remote_applied: PASS
+  AC8_client_helper_module: PASS
+  AC9_query_helper_functions: PASS
+  AC10_health_endpoint_validation: PASS
+
+migration_verification:
+  migration_0003_applied_local: "2025-11-09 18:22:09"
+  migration_0003_applied_remote: "2025-11-09 18:22:21"
+  migration_0003_commands_executed: 35
+  tables_recreated: 8
+  foreign_keys_preserved: 7
+  seed_data_preserved: true
+  data_loss: false
+  format_verified_examples:
+    - "Local: 2025-11-09T18:22:09.728Z"
+    - "Remote: 2025-11-09T18:22:21.855Z"
+    - "New record: 2025-11-09T18:25:12.871Z"
