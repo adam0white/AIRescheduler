@@ -7,12 +7,8 @@ import { createClient, getAllTrainingThresholds } from './db/client';
 import { handleRpc } from './rpc/handlers';
 import { generateCorrelationId, createContext } from './lib/logger';
 import { getAssetFromKV } from '@cloudflare/kv-asset-handler';
-import * as weatherService from './services/weather-service';
-import * as classificationService from './services/classification-service';
-import * as candidateSlotService from './services/candidate-slot-service';
-import * as aiRescheduleService from './services/ai-reschedule-service';
-import * as rescheduleActionService from './services/reschedule-action-service';
 import * as cronMonitoringService from './services/cron-monitoring-service';
+import * as cronOrchestration from './services/cron-orchestration';
 
 export interface Env {
   AIRESCHEDULER_DB: D1Database;
@@ -98,8 +94,10 @@ export default {
     const execCtx = createContext(correlationId, env);
     const startTime = Date.now();
 
-    // Timeout constants
+    // Timeout and threshold constants
     const WARN_THRESHOLD = 110000; // Warn at 110s to complete before limit (120s hard limit)
+    const AI_CONFIDENCE_THRESHOLD = 80; // Minimum AI confidence for auto-rescheduling
+    const PERFORMANCE_WARN_MS = 60000; // Warn if execution exceeds 60 seconds
 
     // Initialize metrics object
     interface CronMetrics {
@@ -138,27 +136,11 @@ export default {
       });
 
       // Step 1: Weather Polling
-      try {
-        const weatherStartTime = Date.now();
-        const weatherResult = await weatherService.pollWeather(execCtx, {});
-        const weatherDuration = Date.now() - weatherStartTime;
-
-        if (weatherResult) {
-          metrics.weather_snapshots_created = weatherResult.snapshotsCreated || 0;
-          execCtx.logger.info('[cron-pipeline] Weather polling completed', {
-            snapshots_created: metrics.weather_snapshots_created,
-            weather_service_duration_ms: weatherDuration,
-          });
-        }
-      } catch (error) {
+      const weatherResult = await cronOrchestration.runWeatherPolling(execCtx, startTime);
+      metrics.weather_snapshots_created = weatherResult.snapshotsCreated;
+      if (weatherResult.error) {
         metrics.errors++;
-        const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-        errorDetails.push(`Weather service failed: ${errorMsg}`);
-        execCtx.logger.warn('[cron-pipeline] Weather polling failed', {
-          error: errorMsg,
-          duration_ms: Date.now() - startTime,
-        });
-        // Continue to classification despite weather failure
+        errorDetails.push(weatherResult.error);
       }
 
       // Check timeout before classification
@@ -169,34 +151,12 @@ export default {
       }
 
       // Step 2: Flight Classification
-      let classificationResults: classificationService.ClassificationResult[] = [];
-      try {
-        const classificationStartTime = Date.now();
-        const classificationResult = await classificationService.classifyFlights(execCtx, {});
-        const classificationDuration = Date.now() - classificationStartTime;
-
-        if (classificationResult && classificationResult.results) {
-          classificationResults = classificationResult.results;
-          metrics.flights_analyzed = classificationResults.length;
-          metrics.weather_conflicts_found = classificationResults.filter(
-            (r) => r.weatherStatus === 'auto-reschedule' || r.weatherStatus === 'advisory'
-          ).length;
-
-          execCtx.logger.info('[cron-pipeline] Flight classification completed', {
-            flights_analyzed: metrics.flights_analyzed,
-            conflicts_found: metrics.weather_conflicts_found,
-            classification_service_duration_ms: classificationDuration,
-          });
-        }
-      } catch (error) {
+      const classificationResult = await cronOrchestration.runFlightClassification(execCtx, startTime);
+      metrics.flights_analyzed = classificationResult.flightsAnalyzed;
+      metrics.weather_conflicts_found = classificationResult.weatherConflictsFound;
+      if (classificationResult.error) {
         metrics.errors++;
-        const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-        errorDetails.push(`Classification service failed: ${errorMsg}`);
-        execCtx.logger.warn('[cron-pipeline] Flight classification failed', {
-          error: errorMsg,
-          duration_ms: Date.now() - startTime,
-        });
-        // Continue to rescheduling with empty results
+        errorDetails.push(classificationResult.error);
       }
 
       // Check timeout before rescheduling
@@ -207,107 +167,19 @@ export default {
       }
 
       // Step 3: Auto-Rescheduling
-      try {
-        const reschedulingStartTime = Date.now();
-
-        // Filter flights that need auto-rescheduling (status='auto-reschedule')
-        const flightsToReschedule = classificationResults.filter(
-          (r) => r.weatherStatus === 'auto-reschedule'
-        );
-
-        execCtx.logger.info('[cron-pipeline] Processing auto-reschedules', {
-          flights_to_reschedule: flightsToReschedule.length,
-        });
-
-        for (const flight of flightsToReschedule) {
-          try {
-            // Generate candidate slots
-            const candidateResult = await candidateSlotService.generateCandidateSlots(
-              env,
-              flight.flightId,
-              execCtx
-            );
-
-            if (!candidateResult || !candidateResult.candidateSlots || candidateResult.candidateSlots.length === 0) {
-              execCtx.logger.info('[cron-pipeline] No candidate slots available', {
-                flightId: flight.flightId,
-              });
-              metrics.flights_skipped++;
-              continue;
-            }
-
-            // Generate AI recommendations
-            const aiRecommendations = await aiRescheduleService.generateRescheduleRecommendations(
-              env,
-              candidateResult,
-              execCtx
-            );
-
-            if (!aiRecommendations || !aiRecommendations.recommendations || aiRecommendations.recommendations.length === 0) {
-              execCtx.logger.info('[cron-pipeline] No AI recommendations available', {
-                flightId: flight.flightId,
-              });
-              metrics.flights_skipped++;
-              continue;
-            }
-
-            // Check top recommendation confidence
-            const topRecommendation = aiRecommendations.recommendations[0];
-            if (!topRecommendation) {
-              execCtx.logger.info('[cron-pipeline] No top recommendation available', {
-                flightId: flight.flightId,
-              });
-              metrics.flights_skipped++;
-              continue;
-            }
-
-            if (topRecommendation.aiConfidence >= 80) {
-              // Auto-accept: High confidence reschedule
-              const actionResult = await rescheduleActionService.recordAutoRescheduleDecision(
-                env,
-                flight.flightId,
-                topRecommendation,
-                execCtx
-              );
-
-              metrics.flights_rescheduled++;
-              execCtx.logger.info('[cron-pipeline] Auto-reschedule created', {
-                flightId: flight.flightId,
-                newFlightId: actionResult.newFlightId,
-                confidence: topRecommendation.aiConfidence,
-              });
-            } else {
-              // Low confidence: Requires manual review
-              metrics.flights_pending_review++;
-              execCtx.logger.info('[cron-pipeline] Auto-reschedule skipped (low confidence)', {
-                flightId: flight.flightId,
-                confidence: topRecommendation.aiConfidence,
-              });
-            }
-          } catch (error) {
-            execCtx.logger.error('[cron-pipeline] Failed to process flight reschedule', {
-              flightId: flight.flightId,
-              error: error instanceof Error ? error.message : 'Unknown error',
-            });
-            metrics.flights_skipped++;
-            // Continue processing other flights
-          }
-        }
-
-        const reschedulingDuration = Date.now() - reschedulingStartTime;
-        execCtx.logger.info('[cron-pipeline] Auto-reschedule processing completed', {
-          flights_rescheduled: metrics.flights_rescheduled,
-          flights_pending_review: metrics.flights_pending_review,
-          rescheduling_service_duration_ms: reschedulingDuration,
-        });
-      } catch (error) {
+      const reschedulingResult = await cronOrchestration.runAutoRescheduling(
+        env,
+        execCtx,
+        classificationResult.results,
+        AI_CONFIDENCE_THRESHOLD,
+        startTime
+      );
+      metrics.flights_rescheduled = reschedulingResult.flightsRescheduled;
+      metrics.flights_pending_review = reschedulingResult.flightsPendingReview;
+      metrics.flights_skipped = reschedulingResult.flightsSkipped;
+      if (reschedulingResult.error) {
         metrics.errors++;
-        const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-        errorDetails.push(`Rescheduling service failed: ${errorMsg}`);
-        execCtx.logger.warn('[cron-pipeline] Auto-reschedule processing failed', {
-          error: errorMsg,
-          duration_ms: Date.now() - startTime,
-        });
+        errorDetails.push(reschedulingResult.error);
       }
     } catch (error) {
       // Critical failure or timeout
@@ -371,7 +243,7 @@ export default {
       }
 
       // Warn if duration exceeded threshold
-      if (metrics.duration_ms > 60000) {
+      if (metrics.duration_ms > PERFORMANCE_WARN_MS) {
         execCtx.logger.warn('[cron-pipeline] Execution duration exceeded 60 seconds', {
           duration_ms: metrics.duration_ms,
         });

@@ -12,7 +12,7 @@ CREATE TABLE students (
   name TEXT NOT NULL,
   training_level TEXT NOT NULL CHECK(training_level IN ('student', 'private', 'instrument')),
   email TEXT NOT NULL UNIQUE,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
 -- Instructors table
@@ -22,7 +22,7 @@ CREATE TABLE instructors (
   name TEXT NOT NULL,
   certifications TEXT NOT NULL, -- JSON array of cert types
   email TEXT NOT NULL UNIQUE,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
 -- Aircraft table
@@ -32,7 +32,7 @@ CREATE TABLE aircraft (
   registration TEXT NOT NULL UNIQUE,
   category TEXT NOT NULL CHECK(category IN ('single-engine', 'multi-engine', 'complex')),
   status TEXT NOT NULL DEFAULT 'available' CHECK(status IN ('available', 'maintenance', 'reserved')),
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
 -- Flights table
@@ -48,8 +48,8 @@ CREATE TABLE flights (
   arrival_airport TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'scheduled' CHECK(status IN ('scheduled', 'rescheduled', 'completed', 'cancelled')),
   weather_status TEXT DEFAULT 'unknown' CHECK(weather_status IN ('unknown', 'clear', 'advisory', 'auto-reschedule')),
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   FOREIGN KEY (student_id) REFERENCES students(id),
   FOREIGN KEY (instructor_id) REFERENCES instructors(id),
   FOREIGN KEY (aircraft_id) REFERENCES aircraft(id)
@@ -69,7 +69,7 @@ CREATE TABLE weather_snapshots (
   conditions TEXT NOT NULL,    -- weather description
   confidence_horizon INTEGER NOT NULL, -- hours
   correlation_id TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   FOREIGN KEY (flight_id) REFERENCES flights(id)
 );
 
@@ -97,7 +97,7 @@ CREATE TABLE training_thresholds (
   min_visibility REAL NOT NULL,     -- statute miles
   min_ceiling INTEGER NOT NULL,     -- feet AGL
   description TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
 -- Notifications table

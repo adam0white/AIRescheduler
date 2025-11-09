@@ -19,7 +19,7 @@ CREATE TABLE cron_runs (
   flights_pending_review INTEGER DEFAULT 0,
   flights_skipped INTEGER DEFAULT 0,
   error_details TEXT, -- JSON array of error messages
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
 -- Indexes for query performance

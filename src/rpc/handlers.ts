@@ -4,7 +4,23 @@
  */
 
 import { Env } from '../index';
-import { RpcMethodMap, RpcMethod, RpcSuccessResponse, RpcErrorResponse } from './schema';
+import {
+  RpcMethodMap,
+  RpcMethod,
+  RpcSuccessResponse,
+  RpcErrorResponse,
+  WeatherPollRequest,
+  AutoRescheduleRequest,
+  SeedDemoDataRequest,
+  ListFlightsRequest,
+  FlightClassificationRequest,
+  GetWeatherSnapshotsRequest,
+  GenerateCandidateSlotsRequest,
+  GenerateRescheduleRecommendationsRequest,
+  RecordManagerDecisionRequest,
+  GetFlightRescheduleHistoryRequest,
+  GetCronRunsRequest,
+} from './schema';
 import * as weatherService from '../services/weather-service';
 import * as reschedulerService from '../services/rescheduler';
 import * as seedDataService from '../services/seed-data';
@@ -97,73 +113,95 @@ export async function handleRpc(request: Request, env: Env): Promise<Response> {
     let result;
     try {
       switch (rpcMethod) {
-        case 'weatherPoll':
-          result = await weatherService.pollWeather(ctx, validation.data as any);
+        case 'weatherPoll': {
+          const params = validation.data as WeatherPollRequest;
+          result = await weatherService.pollWeather(ctx, params);
           break;
+        }
 
-        case 'autoReschedule':
-          result = await reschedulerService.autoReschedule(ctx, validation.data as any);
+        case 'autoReschedule': {
+          const params = validation.data as AutoRescheduleRequest;
+          result = await reschedulerService.autoReschedule(ctx, params);
           break;
+        }
 
-        case 'seedDemoData':
-          result = await seedDataService.seedDemoData(ctx, validation.data as any);
+        case 'seedDemoData': {
+          const params = validation.data as SeedDemoDataRequest;
+          result = await seedDataService.seedDemoData(ctx, params);
           break;
+        }
 
-        case 'listFlights':
-          result = await flightListService.listFlights(ctx, validation.data as any);
+        case 'listFlights': {
+          const params = validation.data as ListFlightsRequest;
+          result = await flightListService.listFlights(ctx, params);
           break;
+        }
 
-        case 'classifyFlights':
-          result = await classificationService.classifyFlights(ctx, validation.data as any);
+        case 'classifyFlights': {
+          const params = validation.data as FlightClassificationRequest;
+          result = await classificationService.classifyFlights(ctx, params);
           break;
+        }
 
-        case 'getWeatherSnapshots':
-          result = await weatherService.getWeatherSnapshotsForFlight(ctx, validation.data as any);
+        case 'getWeatherSnapshots': {
+          const params = validation.data as GetWeatherSnapshotsRequest;
+          result = await weatherService.getWeatherSnapshotsForFlight(ctx, params);
           break;
+        }
 
-        case 'generateCandidateSlots':
+        case 'generateCandidateSlots': {
+          const { flightId } = validation.data as GenerateCandidateSlotsRequest;
           result = await candidateSlotService.generateCandidateSlots(
             env,
-            (validation.data as any).flightId,
+            flightId,
             ctx
           );
           break;
+        }
 
-        case 'generateRescheduleRecommendations':
+        case 'generateRescheduleRecommendations': {
+          const { candidateSlotsResult } = validation.data as GenerateRescheduleRecommendationsRequest;
           result = await aiRescheduleService.generateRescheduleRecommendations(
             env,
-            (validation.data as any).candidateSlotsResult,
+            candidateSlotsResult,
             ctx
           );
           break;
+        }
 
-        case 'recordManagerDecision':
+        case 'recordManagerDecision': {
+          const params = validation.data as RecordManagerDecisionRequest;
           result = await rescheduleActionService.recordRescheduleAction(
             env,
-            validation.data as any,
+            params,
             ctx
           );
           break;
+        }
 
-        case 'getFlightRescheduleHistory':
+        case 'getFlightRescheduleHistory': {
+          const { flightId } = validation.data as GetFlightRescheduleHistoryRequest;
           result = await rescheduleActionService.getFlightRescheduleHistory(
             env,
-            (validation.data as any).flightId,
+            flightId,
             ctx
           );
           break;
+        }
 
-        case 'getCronRuns':
+        case 'getCronRuns': {
+          const { limit = 10, status } = validation.data as GetCronRunsRequest;
           const cronRuns = await cronMonitoringService.getRecentCronRuns(
             ctx,
-            (validation.data as any).limit || 10,
-            (validation.data as any).status
+            limit,
+            status
           );
           result = {
             runs: cronRuns,
             totalCount: cronRuns.length,
           };
           break;
+        }
 
         default:
           // TypeScript should prevent this, but handle defensively
