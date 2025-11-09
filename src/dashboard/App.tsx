@@ -7,9 +7,10 @@ import { useState } from 'react';
 import { TestingControls } from './components/TestingControls';
 import { FlightStatusBoard } from './components/FlightStatusBoard';
 import { HistoricalWeatherView } from './components/HistoricalWeatherView';
+import { CronStatusMonitor } from './components/CronStatusMonitor';
 
 export function App() {
-  const [activeView, setActiveView] = useState<'flights' | 'history'>('flights');
+  const [activeView, setActiveView] = useState<'flights' | 'history' | 'cron'>('flights');
 
   return (
     <div
@@ -72,13 +73,30 @@ export function App() {
             >
               Weather History
             </button>
+            <button
+              onClick={() => setActiveView('cron')}
+              style={{
+                padding: '0.5rem 1rem',
+                borderRadius: '0.375rem',
+                backgroundColor: activeView === 'cron' ? '#3b82f6' : '#374151',
+                color: '#ffffff',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: '0.875rem',
+                fontWeight: 500,
+              }}
+            >
+              Cron Status
+            </button>
           </nav>
         </div>
       </header>
 
       <main>
         <TestingControls />
-        {activeView === 'flights' ? <FlightStatusBoard /> : <HistoricalWeatherView />}
+        {activeView === 'flights' && <FlightStatusBoard />}
+        {activeView === 'history' && <HistoricalWeatherView />}
+        {activeView === 'cron' && <CronStatusMonitor />}
       </main>
     </div>
   );

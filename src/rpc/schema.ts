@@ -296,6 +296,41 @@ export type RecordManagerDecisionRequest = z.infer<typeof RecordManagerDecisionR
 export type RecordManagerDecisionResponse = z.infer<typeof RecordManagerDecisionResponseSchema>;
 
 // ========================================
+// GetCronRuns Method
+// ========================================
+
+export const GetCronRunsRequestSchema = z.object({
+  limit: z.number().int().min(1).max(50).optional(), // Default: 10, Max: 50
+  status: z.enum(['success', 'partial', 'error']).optional(),
+});
+
+export const CronRunSchema = z.object({
+  id: z.number(),
+  correlationId: z.string(),
+  status: z.enum(['success', 'partial', 'error']),
+  startedAt: z.string(), // ISO 8601
+  completedAt: z.string(), // ISO 8601
+  durationMs: z.number(),
+  errorCount: z.number(),
+  weatherSnapshotsCreated: z.number(),
+  flightsAnalyzed: z.number(),
+  weatherConflictsFound: z.number(),
+  flightsRescheduled: z.number(),
+  flightsPendingReview: z.number(),
+  flightsSkipped: z.number(),
+  errorDetails: z.array(z.string()),
+});
+
+export const GetCronRunsResponseSchema = z.object({
+  runs: z.array(CronRunSchema),
+  totalCount: z.number(),
+});
+
+export type GetCronRunsRequest = z.infer<typeof GetCronRunsRequestSchema>;
+export type CronRun = z.infer<typeof CronRunSchema>;
+export type GetCronRunsResponse = z.infer<typeof GetCronRunsResponseSchema>;
+
+// ========================================
 // GetFlightRescheduleHistory Method
 // ========================================
 
@@ -376,6 +411,10 @@ export const RpcMethodMap = {
   getFlightRescheduleHistory: {
     request: GetFlightRescheduleHistoryRequestSchema,
     response: GetFlightRescheduleHistoryResponseSchema,
+  },
+  getCronRuns: {
+    request: GetCronRunsRequestSchema,
+    response: GetCronRunsResponseSchema,
   },
 } as const;
 
