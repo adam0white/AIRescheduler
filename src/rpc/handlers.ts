@@ -13,6 +13,7 @@ import * as classificationService from '../services/classification-service';
 import * as candidateSlotService from '../services/candidate-slot-service';
 import * as aiRescheduleService from '../services/ai-reschedule-service';
 import * as rescheduleActionService from '../services/reschedule-action-service';
+import * as cronMonitoringService from '../services/cron-monitoring-service';
 import { generateCorrelationId, createContext } from '../lib/logger';
 
 /**
@@ -150,6 +151,18 @@ export async function handleRpc(request: Request, env: Env): Promise<Response> {
             (validation.data as any).flightId,
             ctx
           );
+          break;
+
+        case 'getCronRuns':
+          const cronRuns = await cronMonitoringService.getRecentCronRuns(
+            ctx,
+            (validation.data as any).limit || 10,
+            (validation.data as any).status
+          );
+          result = {
+            runs: cronRuns,
+            totalCount: cronRuns.length,
+          };
           break;
 
         default:
