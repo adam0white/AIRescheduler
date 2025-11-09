@@ -9,6 +9,10 @@ import * as weatherService from '../services/weather-service';
 import * as reschedulerService from '../services/rescheduler';
 import * as seedDataService from '../services/seed-data';
 import * as flightListService from '../services/flight-list';
+import * as classificationService from '../services/classification-service';
+import * as candidateSlotService from '../services/candidate-slot-service';
+import * as aiRescheduleService from '../services/ai-reschedule-service';
+import * as rescheduleActionService from '../services/reschedule-action-service';
 import { generateCorrelationId, createContext } from '../lib/logger';
 
 /**
@@ -106,6 +110,46 @@ export async function handleRpc(request: Request, env: Env): Promise<Response> {
 
         case 'listFlights':
           result = await flightListService.listFlights(ctx, validation.data as any);
+          break;
+
+        case 'classifyFlights':
+          result = await classificationService.classifyFlights(ctx, validation.data as any);
+          break;
+
+        case 'getWeatherSnapshots':
+          result = await weatherService.getWeatherSnapshotsForFlight(ctx, validation.data as any);
+          break;
+
+        case 'generateCandidateSlots':
+          result = await candidateSlotService.generateCandidateSlots(
+            env,
+            (validation.data as any).flightId,
+            ctx
+          );
+          break;
+
+        case 'generateRescheduleRecommendations':
+          result = await aiRescheduleService.generateRescheduleRecommendations(
+            env,
+            (validation.data as any).candidateSlotsResult,
+            ctx
+          );
+          break;
+
+        case 'recordManagerDecision':
+          result = await rescheduleActionService.recordRescheduleAction(
+            env,
+            validation.data as any,
+            ctx
+          );
+          break;
+
+        case 'getFlightRescheduleHistory':
+          result = await rescheduleActionService.getFlightRescheduleHistory(
+            env,
+            (validation.data as any).flightId,
+            ctx
+          );
           break;
 
         default:

@@ -8,18 +8,20 @@ import { handleRpc } from './rpc/handlers';
 import { generateCorrelationId, createContext } from './lib/logger';
 import * as weatherService from './services/weather-service';
 import * as reschedulerService from './services/rescheduler';
+import { getAssetFromKV } from '@cloudflare/kv-asset-handler';
 
 export interface Env {
   AIRESCHEDULER_DB: D1Database;
   AI_MODEL: Ai;
-  WEATHER_API_KEY: string;
+  WEATHER_API_KEY?: string;
+  __STATIC_CONTENT: KVNamespace;
 }
 
 export default {
   /**
    * Fetch handler - serves dashboard and handles RPC calls
    */
-  async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
     // Health endpoint - validates database connection
@@ -64,60 +66,24 @@ export default {
       return handleRpc(request, env);
     }
 
-    // Placeholder: Dashboard route
-    if (url.pathname === '/') {
-      return new Response(
-        `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AIRescheduler Dashboard</title>
-  <style>
-    body {
-      font-family: system-ui, -apple-system, sans-serif;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-      margin: 0;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-    }
-    .container {
-      text-align: center;
-      padding: 2rem;
-      background: rgba(255, 255, 255, 0.1);
-      border-radius: 1rem;
-      backdrop-filter: blur(10px);
-    }
-    h1 {
-      margin: 0 0 1rem 0;
-      font-size: 2.5rem;
-    }
-    p {
-      margin: 0;
-      opacity: 0.9;
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>AIRescheduler Dashboard</h1>
-    <p>Project scaffolding complete. Ready for development.</p>
-  </div>
-</body>
-</html>`,
+    // Serve static dashboard assets
+    try {
+      return await getAssetFromKV(
         {
-          headers: {
-            'Content-Type': 'text/html; charset=utf-8',
+          request,
+          waitUntil(promise) {
+            return ctx.waitUntil(promise);
           },
+        },
+        {
+          ASSET_NAMESPACE: env.__STATIC_CONTENT,
+          ASSET_MANIFEST: {},
         }
       );
+    } catch (e) {
+      // If asset not found or error, return 404
+      return new Response('Not Found', { status: 404 });
     }
-
-    // Placeholder: API routes will be implemented in future stories
-    return new Response('Not Found', { status: 404 });
   },
 
   /**

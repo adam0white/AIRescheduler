@@ -59,18 +59,27 @@ export interface WeatherSnapshot {
   conditions: string; // weather description
   confidence_horizon: number; // hours
   correlation_id: string;
+  etag: string | null; // ETag for HTTP caching
   created_at: string; // ISO 8601 datetime
 }
 
 export interface RescheduleAction {
   id: number;
   original_flight_id: number;
-  new_flight_id: number | null; // NULL if manual review required
-  reason: string;
+  new_flight_id: number | null; // NULL if manual review required or rejected
+  reason: string; // Legacy field - still present for backward compatibility
   ai_rationale: string | null; // JSON with ranked options and reasoning
   status: 'pending' | 'accepted' | 'rejected' | 'manual-review';
-  created_by: string;
+  created_by: string; // Legacy field - replaced by decided_by
   created_at: string; // ISO 8601 datetime
+  // New fields added in migration 0005
+  action_type: 'auto-accept' | 'manual-accept' | 'manual-reject' | null;
+  decision_source: 'system' | 'manager' | null;
+  recommended_by_ai: number; // Boolean: 0 = false, 1 = true
+  weather_snapshot_id: number | null;
+  decided_at: string | null; // ISO 8601 datetime
+  decided_by: string | null; // Manager name or 'auto-reschedule'
+  notes: string | null; // Optional notes from manager
 }
 
 export interface TrainingThreshold {

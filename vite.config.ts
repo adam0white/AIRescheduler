@@ -10,15 +10,14 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: 'dist/assets',
+    outDir: '../../dist/assets',
     emptyOutDir: true,
     sourcemap: true,
     rollupOptions: {
-      input: {
-        main: path.resolve(__dirname, 'src/dashboard/index.html'),
-      },
+      input: path.resolve(__dirname, 'src/dashboard/index.html'),
     },
   },
+  root: 'src/dashboard',
   server: {
     port: 5173,
     proxy: {

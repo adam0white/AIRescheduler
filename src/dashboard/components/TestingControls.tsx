@@ -5,6 +5,7 @@
 
 import { useState } from 'react';
 import { useRpc } from '../hooks/useRpc';
+import { RescheduleRecommendationCard } from './RescheduleRecommendationCard';
 
 interface ToastMessage {
   id: string;
@@ -17,6 +18,9 @@ export function TestingControls() {
   const { call, loading, error } = useRpc();
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [lastResult, setLastResult] = useState<string | null>(null);
+  const [recommendations, setRecommendations] = useState<any[]>([]);
+  const [recommendationsMetadata, setRecommendationsMetadata] = useState<any>(null);
+  const [showRecommendations, setShowRecommendations] = useState(false);
 
   const showToast = (type: 'success' | 'error', message: string, correlationId?: string) => {
     const id = `toast-${Date.now()}`;
@@ -80,6 +84,84 @@ export function TestingControls() {
       setLastResult(JSON.stringify(result, null, 2));
     } catch (err) {
       showToast('error', error || 'Failed to auto reschedule');
+    }
+  };
+
+  const handleClassifyFlights = async () => {
+    try {
+      const { result, correlationId } = await call('classifyFlights', {});
+
+      const summary = result.results.reduce(
+        (acc: any, r: any) => {
+          acc[r.weatherStatus] = (acc[r.weatherStatus] || 0) + 1;
+          return acc;
+        },
+        {}
+      );
+
+      const message = `Classification complete: ${result.results.length} flights classified (Clear: ${summary.clear || 0}, Advisory: ${summary.advisory || 0}, Auto-reschedule: ${summary['auto-reschedule'] || 0}, Unknown: ${summary.unknown || 0})`;
+      showToast('success', message, correlationId);
+      setLastResult(JSON.stringify(result, null, 2));
+    } catch (err) {
+      showToast('error', error || 'Failed to classify flights');
+    }
+  };
+
+  const handleGenerateRecommendations = async () => {
+    try {
+      // First, get a flight ID to test with (use flight 1 for demo)
+      const flightId = 1;
+
+      // Generate candidate slots
+      const startTime = Date.now();
+      const { result: candidateSlotsResult } = await call(
+        'generateCandidateSlots',
+        { flightId }
+      );
+
+      if (candidateSlotsResult.error) {
+        showToast('error', `Failed to generate candidates: ${candidateSlotsResult.error}`);
+        return;
+      }
+
+      if (candidateSlotsResult.candidateSlots.length === 0) {
+        showToast('error', 'No candidate slots found for this flight');
+        return;
+      }
+
+      // Generate AI recommendations
+      const { result: recommendationsResult, correlationId } = await call(
+        'generateRescheduleRecommendations',
+        { candidateSlotsResult }
+      );
+
+      const elapsedMs = Date.now() - startTime;
+
+      if (recommendationsResult.error) {
+        showToast('error', `Failed to generate recommendations: ${recommendationsResult.error}`);
+        return;
+      }
+
+      // Update UI
+      setRecommendations(recommendationsResult.recommendations || []);
+      setRecommendationsMetadata({
+        flightId,
+        generatedAt: new Date().toISOString(),
+        aiUnavailable: recommendationsResult.aiUnavailable,
+        fallbackReason: recommendationsResult.fallbackReason,
+        elapsedMs,
+      });
+      setShowRecommendations(true);
+
+      const statusText = recommendationsResult.aiUnavailable
+        ? `AI ranking unavailable (${recommendationsResult.fallbackReason}), used fallback`
+        : 'AI ranking available';
+
+      const message = `Generated ${recommendationsResult.recommendations.length} recommendations in ${elapsedMs}ms. ${statusText}`;
+      showToast('success', message, correlationId);
+      setLastResult(JSON.stringify(recommendationsResult, null, 2));
+    } catch (err) {
+      showToast('error', error || 'Failed to generate recommendations');
     }
   };
 
@@ -185,7 +267,115 @@ export function TestingControls() {
         >
           {loading ? 'Loading...' : 'Auto Reschedule'}
         </button>
+
+        <button
+          onClick={handleClassifyFlights}
+          disabled={loading}
+          style={{
+            padding: '0.75rem 1.5rem',
+            backgroundColor: loading ? '#94a3b8' : '#06b6d4',
+            color: 'white',
+            border: 'none',
+            borderRadius: '0.375rem',
+            cursor: loading ? 'not-allowed' : 'pointer',
+            fontWeight: '500',
+            fontSize: '0.875rem',
+            transition: 'background-color 0.2s',
+          }}
+          onMouseEnter={(e) => {
+            if (!loading) (e.target as HTMLButtonElement).style.backgroundColor = '#0891b2';
+          }}
+          onMouseLeave={(e) => {
+            if (!loading) (e.target as HTMLButtonElement).style.backgroundColor = '#06b6d4';
+          }}
+        >
+          {loading ? 'Loading...' : 'Classify Flights'}
+        </button>
+
+        <button
+          onClick={handleGenerateRecommendations}
+          disabled={loading}
+          style={{
+            padding: '0.75rem 1.5rem',
+            backgroundColor: loading ? '#94a3b8' : '#ec4899',
+            color: 'white',
+            border: 'none',
+            borderRadius: '0.375rem',
+            cursor: loading ? 'not-allowed' : 'pointer',
+            fontWeight: '500',
+            fontSize: '0.875rem',
+            transition: 'background-color 0.2s',
+          }}
+          onMouseEnter={(e) => {
+            if (!loading) (e.target as HTMLButtonElement).style.backgroundColor = '#db2777';
+          }}
+          onMouseLeave={(e) => {
+            if (!loading) (e.target as HTMLButtonElement).style.backgroundColor = '#ec4899';
+          }}
+        >
+          {loading ? 'Loading...' : 'Generate AI Recommendations'}
+        </button>
       </div>
+
+      {showRecommendations && recommendations.length > 0 && (
+        <div style={{ marginBottom: '2rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: '600' }}>
+              AI Reschedule Recommendations
+            </h3>
+            <button
+              onClick={() => setShowRecommendations(false)}
+              style={{
+                padding: '0.5rem 1rem',
+                backgroundColor: '#6b7280',
+                color: 'white',
+                border: 'none',
+                borderRadius: '0.375rem',
+                cursor: 'pointer',
+                fontSize: '0.875rem',
+              }}
+            >
+              Clear
+            </button>
+          </div>
+
+          {recommendationsMetadata && (
+            <div style={{ marginBottom: '1rem', padding: '1rem', backgroundColor: '#f3f4f6', borderRadius: '0.375rem' }}>
+              <div style={{ fontSize: '0.875rem', color: '#4b5563' }}>
+                <p style={{ margin: '0.25rem 0' }}>
+                  <strong>Flight ID:</strong> {recommendationsMetadata.flightId}
+                </p>
+                <p style={{ margin: '0.25rem 0' }}>
+                  <strong>Generated:</strong> {new Date(recommendationsMetadata.generatedAt).toLocaleString()}
+                </p>
+                <p style={{ margin: '0.25rem 0' }}>
+                  <strong>Processing Time:</strong> {recommendationsMetadata.elapsedMs}ms
+                </p>
+                <p style={{ margin: '0.25rem 0' }}>
+                  <strong>AI Status:</strong>{' '}
+                  {recommendationsMetadata.aiUnavailable ? (
+                    <span style={{ color: '#f59e0b' }}>
+                      AI ranking unavailable ({recommendationsMetadata.fallbackReason})
+                    </span>
+                  ) : (
+                    <span style={{ color: '#10b981' }}>AI ranking available</span>
+                  )}
+                </p>
+              </div>
+            </div>
+          )}
+
+          <div>
+            {recommendations.map((rec: any) => (
+              <RescheduleRecommendationCard
+                key={rec.candidateIndex}
+                recommendation={rec}
+                isFallback={recommendationsMetadata?.aiUnavailable}
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       {lastResult && (
         <div style={{ marginBottom: '2rem' }}>

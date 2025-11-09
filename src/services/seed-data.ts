@@ -18,7 +18,10 @@ export async function seedDemoData(
   ctx: ExecutionContext,
   request: SeedDemoDataRequest
 ): Promise<SeedDemoDataResponse> {
-  ctx.logger.info('Seed demo data started', { clearExisting: request.clearExisting });
+  ctx.logger.info('Seed demo data started', {
+    clearExisting: request.clearExisting,
+    mode: 'idempotent (INSERT OR IGNORE - safe to run multiple times)'
+  });
 
   const client = createClient(ctx.env.AIRESCHEDULER_DB);
 
@@ -76,32 +79,33 @@ export async function seedDemoData(
 
     // Insert base entities first (students, instructors, aircraft)
     // These have no foreign key dependencies
+    // Using INSERT OR IGNORE to make seeding idempotent (can be run multiple times safely)
     const baseEntities = [
       // Insert 3 students
       client.db
-        .prepare(`INSERT INTO students (name, training_level, email, created_at) VALUES (?, ?, ?, datetime('now'))`)
+        .prepare(`INSERT OR IGNORE INTO students (name, training_level, email, created_at) VALUES (?, ?, ?, datetime('now'))`)
         .bind('John Doe', 'student', 'john.doe@example.com'),
       client.db
-        .prepare(`INSERT INTO students (name, training_level, email, created_at) VALUES (?, ?, ?, datetime('now'))`)
+        .prepare(`INSERT OR IGNORE INTO students (name, training_level, email, created_at) VALUES (?, ?, ?, datetime('now'))`)
         .bind('Sarah Smith', 'private', 'sarah.smith@example.com'),
       client.db
-        .prepare(`INSERT INTO students (name, training_level, email, created_at) VALUES (?, ?, ?, datetime('now'))`)
+        .prepare(`INSERT OR IGNORE INTO students (name, training_level, email, created_at) VALUES (?, ?, ?, datetime('now'))`)
         .bind('Mike Johnson', 'instrument', 'mike.johnson@example.com'),
 
       // Insert 2 instructors
       client.db
-        .prepare(`INSERT INTO instructors (name, certifications, email, created_at) VALUES (?, ?, ?, datetime('now'))`)
+        .prepare(`INSERT OR IGNORE INTO instructors (name, certifications, email, created_at) VALUES (?, ?, ?, datetime('now'))`)
         .bind('Alice Williams', JSON.stringify(['CFI', 'CFII']), 'alice.williams@example.com'),
       client.db
-        .prepare(`INSERT INTO instructors (name, certifications, email, created_at) VALUES (?, ?, ?, datetime('now'))`)
+        .prepare(`INSERT OR IGNORE INTO instructors (name, certifications, email, created_at) VALUES (?, ?, ?, datetime('now'))`)
         .bind('Bob Martinez', JSON.stringify(['CFI', 'CFII', 'MEI']), 'bob.martinez@example.com'),
 
       // Insert 2 aircraft
       client.db
-        .prepare(`INSERT INTO aircraft (registration, category, status, created_at) VALUES (?, ?, ?, datetime('now'))`)
+        .prepare(`INSERT OR IGNORE INTO aircraft (registration, category, status, created_at) VALUES (?, ?, ?, datetime('now'))`)
         .bind('N12345', 'single-engine', 'available'),
       client.db
-        .prepare(`INSERT INTO aircraft (registration, category, status, created_at) VALUES (?, ?, ?, datetime('now'))`)
+        .prepare(`INSERT OR IGNORE INTO aircraft (registration, category, status, created_at) VALUES (?, ?, ?, datetime('now'))`)
         .bind('N67890', 'complex', 'available'),
     ];
 
@@ -109,11 +113,12 @@ export async function seedDemoData(
     await client.db.batch(baseEntities);
 
     // Now insert flights (which have foreign keys to students, instructors, aircraft)
+    // Using INSERT OR IGNORE to make seeding idempotent
     const flightStatements = [
       // Insert 5 flights
       // Flight 1: Tomorrow 10am, John (student #1) + Alice (instructor #1) + N12345 (aircraft #1)
       client.db
-        .prepare(`INSERT INTO flights (student_id, instructor_id, aircraft_id, departure_time, arrival_time, departure_airport, arrival_airport, status, weather_status, created_at, updated_at)
+        .prepare(`INSERT OR IGNORE INTO flights (student_id, instructor_id, aircraft_id, departure_time, arrival_time, departure_airport, arrival_airport, status, weather_status, created_at, updated_at)
                   VALUES (?, ?, ?, ?, ?, ?, ?, 'scheduled', 'unknown', datetime('now'), datetime('now'))`)
         .bind(
           1, // John (first student)
@@ -127,7 +132,7 @@ export async function seedDemoData(
 
       // Flight 2: Tomorrow 2pm, Sarah (student #2) + Bob (instructor #2) + N67890 (aircraft #2)
       client.db
-        .prepare(`INSERT INTO flights (student_id, instructor_id, aircraft_id, departure_time, arrival_time, departure_airport, arrival_airport, status, weather_status, created_at, updated_at)
+        .prepare(`INSERT OR IGNORE INTO flights (student_id, instructor_id, aircraft_id, departure_time, arrival_time, departure_airport, arrival_airport, status, weather_status, created_at, updated_at)
                   VALUES (?, ?, ?, ?, ?, ?, ?, 'scheduled', 'unknown', datetime('now'), datetime('now'))`)
         .bind(
           2, // Sarah
@@ -141,7 +146,7 @@ export async function seedDemoData(
 
       // Flight 3: In 3 days 9am, Mike (student #3) + Bob (instructor #2) + N67890 (aircraft #2)
       client.db
-        .prepare(`INSERT INTO flights (student_id, instructor_id, aircraft_id, departure_time, arrival_time, departure_airport, arrival_airport, status, weather_status, created_at, updated_at)
+        .prepare(`INSERT OR IGNORE INTO flights (student_id, instructor_id, aircraft_id, departure_time, arrival_time, departure_airport, arrival_airport, status, weather_status, created_at, updated_at)
                   VALUES (?, ?, ?, ?, ?, ?, ?, 'scheduled', 'unknown', datetime('now'), datetime('now'))`)
         .bind(
           3, // Mike
@@ -155,7 +160,7 @@ export async function seedDemoData(
 
       // Flight 4: In 5 days 11am, John (student #1) + Alice (instructor #1) + N12345 (aircraft #1)
       client.db
-        .prepare(`INSERT INTO flights (student_id, instructor_id, aircraft_id, departure_time, arrival_time, departure_airport, arrival_airport, status, weather_status, created_at, updated_at)
+        .prepare(`INSERT OR IGNORE INTO flights (student_id, instructor_id, aircraft_id, departure_time, arrival_time, departure_airport, arrival_airport, status, weather_status, created_at, updated_at)
                   VALUES (?, ?, ?, ?, ?, ?, ?, 'scheduled', 'unknown', datetime('now'), datetime('now'))`)
         .bind(
           1, // John
@@ -169,7 +174,7 @@ export async function seedDemoData(
 
       // Flight 5: In 7 days 1pm, Sarah (student #2) + Alice (instructor #1) + N12345 (aircraft #1)
       client.db
-        .prepare(`INSERT INTO flights (student_id, instructor_id, aircraft_id, departure_time, arrival_time, departure_airport, arrival_airport, status, weather_status, created_at, updated_at)
+        .prepare(`INSERT OR IGNORE INTO flights (student_id, instructor_id, aircraft_id, departure_time, arrival_time, departure_airport, arrival_airport, status, weather_status, created_at, updated_at)
                   VALUES (?, ?, ?, ?, ?, ?, ?, 'scheduled', 'unknown', datetime('now'), datetime('now'))`)
         .bind(
           2, // Sarah
