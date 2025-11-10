@@ -3,7 +3,7 @@
  * Displays flights with weather status badges and detailed checkpoint information
  */
 
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { CSSProperties, Fragment, useEffect, useMemo, useState } from 'react';
 import { useRpc } from '../hooks/useRpc';
 import { WeatherTimeline } from './WeatherTimeline';
 
@@ -70,17 +70,31 @@ export function FlightStatusBoard() {
     setLoading(true);
     try {
       const { result: flightResult } = await call('listFlights', {});
-      setFlights(flightResult.flights || []);
+      const flightList: Flight[] = flightResult.flights || [];
+
+      setFlights(flightList);
 
       // Load classification details for flights with weather status
-      if (flightResult.flights && flightResult.flights.length > 0) {
-        const flightIds = flightResult.flights.map((f: Flight) => f.id);
+      if (flightList.length > 0) {
+        const flightIds = flightList.map((f: Flight) => f.id);
         const { result: classResult } = await call('classifyFlights', { flightIds });
         const classMap = new Map<number, ClassificationResult>();
         classResult.results.forEach((r: ClassificationResult) => {
           classMap.set(r.flightId, r);
         });
         setClassifications(classMap);
+
+        const enrichedFlights = flightList.map((flight) => {
+          const classification = classMap.get(flight.id);
+          if (!classification) {
+            return flight;
+          }
+          return {
+            ...flight,
+            weatherStatus: classification.weatherStatus as WeatherStatus,
+          };
+        });
+        setFlights(enrichedFlights);
       }
     } catch (err) {
       console.error('Failed to load flights:', err);
@@ -422,19 +436,25 @@ export function FlightStatusBoard() {
                       const primaryThresholds =
                         classification?.breachedCheckpoints?.[0]?.thresholds;
 
+                      const cardStyles: CSSProperties = {
+                        background: `linear-gradient(165deg, rgba(15, 23, 42, 0.95) 0%, rgba(15, 23, 42, 0.75) 65%, ${visuals.bg} 100%)`,
+                        borderRadius: '0.75rem',
+                        padding: '1.25rem',
+                        border: visuals.border,
+                        boxShadow: '0 20px 45px -30px rgba(15, 23, 42, 0.8)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '1rem',
+                      };
+
+                      if (isExpanded) {
+                        cardStyles.gridColumn = '1 / -1';
+                      }
+
                       return (
                         <div
                           key={flight.id}
-                          style={{
-                            background: `linear-gradient(165deg, rgba(15, 23, 42, 0.95) 0%, rgba(15, 23, 42, 0.75) 65%, ${visuals.bg} 100%)`,
-                            borderRadius: '0.75rem',
-                            padding: '1.25rem',
-                            border: visuals.border,
-                            boxShadow: '0 20px 45px -30px rgba(15, 23, 42, 0.8)',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '1rem',
-                          }}
+                          style={cardStyles}
                         >
                           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem' }}>
                             <div>

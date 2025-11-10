@@ -5,7 +5,7 @@
 
 import { ExecutionContext } from '../lib/logger';
 import { SeedDemoDataRequest, SeedDemoDataResponse } from '../rpc/schema';
-import { createClient } from '../db/client';
+import { createClient, prepareQuery, prepareQueryOne } from '../db/client';
 
 /**
  * Seeds the database with demo data for testing
@@ -49,152 +49,311 @@ export async function seedDemoData(
       ctx.logger.info('Existing data cleared successfully');
     }
 
-    // Calculate dates for flights
     const now = new Date();
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(10, 0, 0, 0);
 
-    const day3 = new Date(now);
-    day3.setDate(day3.getDate() + 3);
-    day3.setHours(9, 0, 0, 0);
+    // Expanded base datasets
+    const studentSeeds = [
+      { name: 'John Doe', trainingLevel: 'student' as const, email: 'john.doe@example.com' },
+      { name: 'Sarah Smith', trainingLevel: 'private' as const, email: 'sarah.smith@example.com' },
+      { name: 'Mike Johnson', trainingLevel: 'instrument' as const, email: 'mike.johnson@example.com' },
+      { name: 'Bella Nguyen', trainingLevel: 'student' as const, email: 'bella.nguyen@example.com' },
+      { name: 'David Lee', trainingLevel: 'instrument' as const, email: 'david.lee@example.com' },
+      { name: 'Carla Fernandez', trainingLevel: 'private' as const, email: 'carla.fernandez@example.com' },
+    ];
 
-    const day5 = new Date(now);
-    day5.setDate(day5.getDate() + 5);
-    day5.setHours(11, 0, 0, 0);
+    const instructorSeeds = [
+      { name: 'Alice Williams', certifications: ['CFI', 'CFII'], email: 'alice.williams@example.com' },
+      { name: 'Bob Martinez', certifications: ['CFI', 'CFII', 'MEI'], email: 'bob.martinez@example.com' },
+      { name: 'Chris Patel', certifications: ['CFI', 'MEI'], email: 'chris.patel@example.com' },
+      { name: 'Laura Chen', certifications: ['CFII', 'ATP'], email: 'laura.chen@example.com' },
+    ];
 
-    const day7 = new Date(now);
-    day7.setDate(day7.getDate() + 7);
-    day7.setHours(13, 0, 0, 0);
+    const aircraftSeeds = [
+      { registration: 'N12345', category: 'single-engine', status: 'available' },
+      { registration: 'N67890', category: 'complex', status: 'available' },
+      { registration: 'N24680', category: 'multi-engine', status: 'available' },
+      { registration: 'N13579', category: 'single-engine', status: 'available' },
+    ];
 
-    const tomorrow2pm = new Date(tomorrow);
-    tomorrow2pm.setHours(14, 0, 0, 0);
+    // Seed base entities idempotently
+    const baseStatements = [
+      ...studentSeeds.map((student) =>
+        client.db
+          .prepare(
+            `INSERT OR IGNORE INTO students (name, training_level, email, created_at) VALUES (?, ?, ?, datetime('now'))`
+          )
+          .bind(student.name, student.trainingLevel, student.email)
+      ),
+      ...instructorSeeds.map((instructor) =>
+        client.db
+          .prepare(
+            `INSERT OR IGNORE INTO instructors (name, certifications, email, created_at) VALUES (?, ?, ?, datetime('now'))`
+          )
+          .bind(instructor.name, JSON.stringify(instructor.certifications), instructor.email)
+      ),
+      ...aircraftSeeds.map((aircraft) =>
+        client.db
+          .prepare(
+            `INSERT OR IGNORE INTO aircraft (registration, category, status, created_at) VALUES (?, ?, ?, datetime('now'))`
+          )
+          .bind(aircraft.registration, aircraft.category, aircraft.status)
+      ),
+    ];
 
-    // Helper to add hours to a date
-    const addHours = (date: Date, hours: number): Date => {
-      const result = new Date(date);
-      result.setHours(result.getHours() + hours);
-      return result;
+    await client.db.batch(baseStatements);
+
+    // Helper to fetch entity IDs by unique keys
+    const getIdMap = async (
+      table: 'students' | 'instructors',
+      keys: string[]
+    ): Promise<Map<string, number>> => {
+      if (keys.length === 0) return new Map();
+      const placeholders = keys.map(() => '?').join(', ');
+      const rows = await prepareQuery<{ id: number; email: string }>(
+        client,
+        `SELECT id, email FROM ${table} WHERE email IN (${placeholders})`,
+        keys
+      );
+      return new Map(rows.map((row) => [row.email, row.id]));
     };
 
-    // Insert base entities first (students, instructors, aircraft)
-    // These have no foreign key dependencies
-    // Using INSERT OR IGNORE to make seeding idempotent (can be run multiple times safely)
-    const baseEntities = [
-      // Insert 3 students
-      client.db
-        .prepare(`INSERT OR IGNORE INTO students (name, training_level, email, created_at) VALUES (?, ?, ?, datetime('now'))`)
-        .bind('John Doe', 'student', 'john.doe@example.com'),
-      client.db
-        .prepare(`INSERT OR IGNORE INTO students (name, training_level, email, created_at) VALUES (?, ?, ?, datetime('now'))`)
-        .bind('Sarah Smith', 'private', 'sarah.smith@example.com'),
-      client.db
-        .prepare(`INSERT OR IGNORE INTO students (name, training_level, email, created_at) VALUES (?, ?, ?, datetime('now'))`)
-        .bind('Mike Johnson', 'instrument', 'mike.johnson@example.com'),
+    const getAircraftMap = async (registrations: string[]): Promise<Map<string, number>> => {
+      if (registrations.length === 0) return new Map();
+      const placeholders = registrations.map(() => '?').join(', ');
+      const rows = await prepareQuery<{ id: number; registration: string }>(
+        client,
+        `SELECT id, registration FROM aircraft WHERE registration IN (${placeholders})`,
+        registrations
+      );
+      return new Map(rows.map((row) => [row.registration, row.id]));
+    };
 
-      // Insert 2 instructors
-      client.db
-        .prepare(`INSERT OR IGNORE INTO instructors (name, certifications, email, created_at) VALUES (?, ?, ?, datetime('now'))`)
-        .bind('Alice Williams', JSON.stringify(['CFI', 'CFII']), 'alice.williams@example.com'),
-      client.db
-        .prepare(`INSERT OR IGNORE INTO instructors (name, certifications, email, created_at) VALUES (?, ?, ?, datetime('now'))`)
-        .bind('Bob Martinez', JSON.stringify(['CFI', 'CFII', 'MEI']), 'bob.martinez@example.com'),
+    const studentIdByEmail = await getIdMap('students', studentSeeds.map((s) => s.email));
+    const instructorIdByEmail = await getIdMap('instructors', instructorSeeds.map((i) => i.email));
+    const aircraftIdByRegistration = await getAircraftMap(aircraftSeeds.map((a) => a.registration));
 
-      // Insert 2 aircraft
-      client.db
-        .prepare(`INSERT OR IGNORE INTO aircraft (registration, category, status, created_at) VALUES (?, ?, ?, datetime('now'))`)
-        .bind('N12345', 'single-engine', 'available'),
-      client.db
-        .prepare(`INSERT OR IGNORE INTO aircraft (registration, category, status, created_at) VALUES (?, ?, ?, datetime('now'))`)
-        .bind('N67890', 'complex', 'available'),
-    ];
+    const studentTrainingByEmail = new Map(
+      studentSeeds.map((student) => [student.email, student.trainingLevel])
+    );
 
-    // Execute base entities batch first
-    await client.db.batch(baseEntities);
+    const createTimedDeparture = (
+      daysOffset: number,
+      hour: number,
+      minute: number = 0
+    ): Date => {
+      const target = new Date(now);
+      target.setDate(target.getDate() + daysOffset);
+      target.setHours(hour, minute, 0, 0);
+      if (target <= now) {
+        target.setDate(target.getDate() + 1);
+      }
+      return target;
+    };
 
-    // Now insert flights (which have foreign keys to students, instructors, aircraft)
-    // Using INSERT OR IGNORE to make seeding idempotent
-    const flightStatements = [
-      // Insert 5 flights
-      // Flight 1: Tomorrow 10am, John (student #1) + Alice (instructor #1) + N12345 (aircraft #1)
-      client.db
-        .prepare(`INSERT OR IGNORE INTO flights (student_id, instructor_id, aircraft_id, departure_time, arrival_time, departure_airport, arrival_airport, status, weather_status, created_at, updated_at)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, 'scheduled', 'unknown', datetime('now'), datetime('now'))`)
+    type FlightSeed = {
+      scenario: string;
+      studentEmail: string;
+      instructorEmail: string;
+      aircraftRegistration: string;
+      departureAirport: string;
+      arrivalAirport: string;
+      departure: {
+        days?: number;
+        hour?: number;
+        minute?: number;
+        offsetHours?: number;
+      };
+      durationMinutes: number;
+    };
+
+    const flightSeeds: FlightSeed[] = [
+      {
+        scenario: 'coastal-training-hop',
+        studentEmail: 'john.doe@example.com',
+        instructorEmail: 'alice.williams@example.com',
+        aircraftRegistration: 'N12345',
+        departureAirport: 'KPAO',
+        arrivalAirport: 'KSQL',
+        departure: { days: 1, hour: 9, minute: 30 },
+        durationMinutes: 90,
+      },
+      {
+        scenario: 'bay-afternoon-crosswind',
+        studentEmail: 'sarah.smith@example.com',
+        instructorEmail: 'bob.martinez@example.com',
+        aircraftRegistration: 'N67890',
+        departureAirport: 'KPAO',
+        arrivalAirport: 'KHAF',
+        departure: { days: 1, hour: 14, minute: 0 },
+        durationMinutes: 110,
+      },
+      {
+        scenario: 'gulf-morning-humidity',
+        studentEmail: 'carla.fernandez@example.com',
+        instructorEmail: 'bob.martinez@example.com',
+        aircraftRegistration: 'N67890',
+        departureAirport: 'KMSY',
+        arrivalAirport: 'KHOU',
+        departure: { offsetHours: 8 },
+        durationMinutes: 135,
+      },
+      {
+        scenario: 'mountain-pass-winds',
+        studentEmail: 'mike.johnson@example.com',
+        instructorEmail: 'chris.patel@example.com',
+        aircraftRegistration: 'N24680',
+        departureAirport: 'KDEN',
+        arrivalAirport: 'KASE',
+        departure: { days: 3, hour: 8, minute: 5 },
+        durationMinutes: 160,
+      },
+      {
+        scenario: 'northwest-low-ceiling',
+        studentEmail: 'bella.nguyen@example.com',
+        instructorEmail: 'laura.chen@example.com',
+        aircraftRegistration: 'N24680',
+        departureAirport: 'KSEA',
+        arrivalAirport: 'KPDX',
+        departure: { days: 2, hour: 7, minute: 20 },
+        durationMinutes: 95,
+      },
+      {
+        scenario: 'midwest-crosswind',
+        studentEmail: 'david.lee@example.com',
+        instructorEmail: 'chris.patel@example.com',
+        aircraftRegistration: 'N13579',
+        departureAirport: 'KORD',
+        arrivalAirport: 'KGRB',
+        departure: { days: 4, hour: 9, minute: 50 },
+        durationMinutes: 120,
+      },
+      {
+        scenario: 'northeast-watch',
+        studentEmail: 'sarah.smith@example.com',
+        instructorEmail: 'laura.chen@example.com',
+        aircraftRegistration: 'N13579',
+        departureAirport: 'KBOS',
+        arrivalAirport: 'KBTV',
+        departure: { days: 5, hour: 7, minute: 40 },
+        durationMinutes: 100,
+      },
+      {
+        scenario: 'desert-heat-turbulence',
+        studentEmail: 'mike.johnson@example.com',
+        instructorEmail: 'bob.martinez@example.com',
+        aircraftRegistration: 'N12345',
+        departureAirport: 'KPHX',
+        arrivalAirport: 'KABQ',
+        departure: { days: 2, hour: 15, minute: 30 },
+        durationMinutes: 125,
+      },
+      {
+        scenario: 'alaska-icing-risk',
+        studentEmail: 'david.lee@example.com',
+        instructorEmail: 'alice.williams@example.com',
+        aircraftRegistration: 'N24680',
+        departureAirport: 'PANC',
+        arrivalAirport: 'PAJN',
+        departure: { days: 6, hour: 11, minute: 45 },
+        durationMinutes: 170,
+      },
+      {
+        scenario: 'great-lakes-lake-effect',
+        studentEmail: 'bella.nguyen@example.com',
+        instructorEmail: 'chris.patel@example.com',
+        aircraftRegistration: 'N13579',
+        departureAirport: 'KDTW',
+        arrivalAirport: 'KCLE',
+        departure: { days: 3, hour: 12, minute: 15 },
+        durationMinutes: 85,
+      },
+    ] as const;
+
+    let flightsInserted = 0;
+    let flightsSkipped = 0;
+
+    for (const flight of flightSeeds) {
+      const studentId = studentIdByEmail.get(flight.studentEmail);
+      const instructorId = instructorIdByEmail.get(flight.instructorEmail);
+      const aircraftId = aircraftIdByRegistration.get(flight.aircraftRegistration);
+
+      if (!studentId || !instructorId || !aircraftId) {
+        ctx.logger.error('Missing foreign key for flight seed', {
+          scenario: flight.scenario,
+          studentFound: !!studentId,
+          instructorFound: !!instructorId,
+          aircraftFound: !!aircraftId,
+        });
+        flightsSkipped++;
+        continue;
+      }
+
+      let departureTime: Date;
+      if (typeof flight.departure.offsetHours === 'number') {
+        departureTime = new Date(now.getTime() + flight.departure.offsetHours * 60 * 60 * 1000);
+        departureTime.setMinutes(flight.departure.minute ?? 0, 0, 0);
+      } else {
+        departureTime = createTimedDeparture(
+          flight.departure.days ?? 0,
+          flight.departure.hour ?? 9,
+          flight.departure.minute ?? 0
+        );
+      }
+
+      const arrivalTime = new Date(departureTime.getTime() + flight.durationMinutes * 60 * 1000);
+      arrivalTime.setSeconds(0, 0);
+
+      const existing = await prepareQueryOne<{ id: number }>(
+        client,
+        `SELECT id FROM flights WHERE student_id = ? AND instructor_id = ? AND aircraft_id = ? AND departure_time = ?`,
+        [studentId, instructorId, aircraftId, departureTime.toISOString()]
+      );
+
+      if (existing) {
+        flightsSkipped++;
+        continue;
+      }
+
+      const insertResult = await client.db
+        .prepare(
+          `INSERT INTO flights (student_id, instructor_id, aircraft_id, departure_time, arrival_time, departure_airport, arrival_airport, status, weather_status, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'scheduled', 'unknown', datetime('now'), datetime('now'))`
+        )
         .bind(
-          1, // John (first student)
-          1, // Alice (first instructor)
-          1, // N12345 (first aircraft)
-          tomorrow.toISOString(),
-          addHours(tomorrow, 2).toISOString(),
-          'KPAO',
-          'KSQL'
-        ),
+          studentId,
+          instructorId,
+          aircraftId,
+          departureTime.toISOString(),
+          arrivalTime.toISOString(),
+          flight.departureAirport,
+          flight.arrivalAirport
+        )
+        .run();
 
-      // Flight 2: Tomorrow 2pm, Sarah (student #2) + Bob (instructor #2) + N67890 (aircraft #2)
-      client.db
-        .prepare(`INSERT OR IGNORE INTO flights (student_id, instructor_id, aircraft_id, departure_time, arrival_time, departure_airport, arrival_airport, status, weather_status, created_at, updated_at)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, 'scheduled', 'unknown', datetime('now'), datetime('now'))`)
-        .bind(
-          2, // Sarah
-          2, // Bob
-          2, // N67890
-          tomorrow2pm.toISOString(),
-          addHours(tomorrow2pm, 2).toISOString(),
-          'KPAO',
-          'KHAF'
-        ),
+      flightsInserted++;
 
-      // Flight 3: In 3 days 9am, Mike (student #3) + Bob (instructor #2) + N67890 (aircraft #2)
-      client.db
-        .prepare(`INSERT OR IGNORE INTO flights (student_id, instructor_id, aircraft_id, departure_time, arrival_time, departure_airport, arrival_airport, status, weather_status, created_at, updated_at)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, 'scheduled', 'unknown', datetime('now'), datetime('now'))`)
-        .bind(
-          3, // Mike
-          2, // Bob
-          2, // N67890
-          day3.toISOString(),
-          addHours(day3, 2).toISOString(),
-          'KPAO',
-          'KSFO'
-        ),
+      ctx.logger.info('Demo flight seeded', {
+        scenario: flight.scenario,
+        flightId: insertResult.meta.last_row_id,
+        trainingLevel: studentTrainingByEmail.get(flight.studentEmail),
+        departureAirport: flight.departureAirport,
+        arrivalAirport: flight.arrivalAirport,
+        departureTime: departureTime.toISOString(),
+        arrivalTime: arrivalTime.toISOString(),
+      });
+    }
 
-      // Flight 4: In 5 days 11am, John (student #1) + Alice (instructor #1) + N12345 (aircraft #1)
-      client.db
-        .prepare(`INSERT OR IGNORE INTO flights (student_id, instructor_id, aircraft_id, departure_time, arrival_time, departure_airport, arrival_airport, status, weather_status, created_at, updated_at)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, 'scheduled', 'unknown', datetime('now'), datetime('now'))`)
-        .bind(
-          1, // John
-          1, // Alice
-          1, // N12345
-          day5.toISOString(),
-          addHours(day5, 2).toISOString(),
-          'KPAO',
-          'KSQL'
-        ),
-
-      // Flight 5: In 7 days 1pm, Sarah (student #2) + Alice (instructor #1) + N12345 (aircraft #1)
-      client.db
-        .prepare(`INSERT OR IGNORE INTO flights (student_id, instructor_id, aircraft_id, departure_time, arrival_time, departure_airport, arrival_airport, status, weather_status, created_at, updated_at)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, 'scheduled', 'unknown', datetime('now'), datetime('now'))`)
-        .bind(
-          2, // Sarah
-          1, // Alice
-          1, // N12345
-          day7.toISOString(),
-          addHours(day7, 2).toISOString(),
-          'KPAO',
-          'KHAF'
-        ),
-    ];
-
-    // Execute flights batch
-    await client.db.batch(flightStatements);
+    ctx.logger.info('Flight seeding summary', {
+      totalScenarios: flightSeeds.length,
+      flightsInserted,
+      flightsSkipped,
+    });
 
     const result = {
-      students: 3,
-      instructors: 2,
-      aircraft: 2,
-      flights: 5,
+      students: studentSeeds.length,
+      instructors: instructorSeeds.length,
+      aircraft: aircraftSeeds.length,
+      flights: flightSeeds.length,
     };
 
     ctx.logger.info('Seed demo data completed', result);

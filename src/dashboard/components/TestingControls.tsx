@@ -30,7 +30,11 @@ export function TestingControls({ layout = 'standalone', onClose }: TestingContr
   const containerStyles = useMemo<CSSProperties>(
     () => ({
       padding: layout === 'overlay' ? '1.5rem' : '2rem',
-      maxWidth: layout === 'overlay' ? '100%' : '1200px',
+      width: '100%',
+      maxWidth: layout === 'overlay' ? 'min(95vw, 1180px)' : '1200px',
+      maxHeight: layout === 'overlay' ? '85vh' : undefined,
+      overflowY: layout === 'overlay' ? 'auto' : undefined,
+      overflowX: 'hidden',
       margin: layout === 'overlay' ? '0' : '0 auto',
       background:
         layout === 'overlay'
@@ -197,6 +201,102 @@ export function TestingControls({ layout = 'standalone', onClose }: TestingContr
     }
   };
 
+  const getButtonStyles = (baseColor: string, disabledColor: string = '#94a3b8') => ({
+    padding: '0.75rem 1.5rem',
+    backgroundColor: loading ? disabledColor : baseColor,
+    color: 'white',
+    border: 'none',
+    borderRadius: '0.375rem',
+    cursor: loading ? 'not-allowed' : 'pointer',
+    fontWeight: 500,
+    fontSize: '0.875rem',
+    transition: 'background-color 0.2s',
+  });
+
+  const steps = [
+    {
+      key: 'seed-data',
+      title: 'Seed Demo Data',
+      description: 'Start with a fresh scenario set so downstream automation has flights to work with.',
+      optional: false,
+      actions: [
+        {
+          key: 'seed-demo',
+          label: loading ? 'Loading...' : 'Seed Demo Data',
+          onClick: handleSeedDemoData,
+          style: getButtonStyles('#3b82f6'),
+        },
+        {
+          key: 'list-flights',
+          label: loading ? 'Loading...' : 'List Flights',
+          onClick: handleListFlights,
+          style: getButtonStyles('#10b981'),
+          secondary: true,
+        },
+      ],
+    },
+    {
+      key: 'poll-weather',
+      title: 'Poll Weather',
+      description:
+        'Fetch forecast data for every upcoming flight. Classification runs automatically after new snapshots are stored.',
+      optional: false,
+      actions: [
+        {
+          key: 'poll-weather-btn',
+          label: loading ? 'Loading...' : 'Poll Weather',
+          onClick: handleWeatherPoll,
+          style: getButtonStyles('#f59e0b'),
+        },
+      ],
+    },
+    {
+      key: 'classify',
+      title: 'Classify Flights (optional rerun)',
+      description:
+        'If you tweak weather data or want to re-check results without polling again, run the classifier manually.',
+      optional: true,
+      actions: [
+        {
+          key: 'classify-flights-btn',
+          label: loading ? 'Loading...' : 'Classify Flights',
+          onClick: handleClassifyFlights,
+          style: getButtonStyles('#06b6d4'),
+        },
+      ],
+    },
+    {
+      key: 'auto-reschedule',
+      title: 'Auto Reschedule',
+      description:
+        'Generate advisories and scheduling changes for flights flagged by classification. This mirrors the hourly cron step.',
+      optional: false,
+      actions: [
+        {
+          key: 'auto-reschedule-btn',
+          label: loading ? 'Loading...' : 'Auto Reschedule',
+          onClick: handleAutoReschedule,
+          style: getButtonStyles('#8b5cf6'),
+        },
+      ],
+    },
+    {
+      key: 'ai-recommendations',
+      title: 'Generate AI Recommendations',
+      description:
+        'Dive into a single impacted flight to show AI-ranked slot suggestions and fallback logic.',
+      optional: false,
+      actions: [
+        {
+          key: 'generate-ai-btn',
+          label: loading ? 'Loading...' : 'Generate AI Recommendations',
+          onClick: handleGenerateRecommendations,
+          style: getButtonStyles('#ec4899'),
+        },
+      ],
+    },
+  ];
+
   return (
     <div style={containerStyles}>
       <div style={headingStyles}>
@@ -220,154 +320,102 @@ export function TestingControls({ layout = 'standalone', onClose }: TestingContr
         )}
       </div>
 
-      <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
-        <button
-          onClick={handleSeedDemoData}
-          disabled={loading}
+      <div
+        style={{
+          marginBottom: '2rem',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '1.25rem',
+        }}
+      >
+        <div
           style={{
-            padding: '0.75rem 1.5rem',
-            backgroundColor: loading ? '#94a3b8' : '#3b82f6',
-            color: 'white',
-            border: 'none',
-            borderRadius: '0.375rem',
-            cursor: loading ? 'not-allowed' : 'pointer',
-            fontWeight: '500',
-            fontSize: '0.875rem',
-            transition: 'background-color 0.2s',
-          }}
-          onMouseEnter={(e) => {
-            if (!loading) (e.target as HTMLButtonElement).style.backgroundColor = '#2563eb';
-          }}
-          onMouseLeave={(e) => {
-            if (!loading) (e.target as HTMLButtonElement).style.backgroundColor = '#3b82f6';
+            padding: '1rem',
+            borderRadius: '0.75rem',
+            backgroundColor: 'rgba(15, 118, 110, 0.08)',
+            border: '1px solid rgba(45, 212, 191, 0.25)',
+            color: '#0f172a',
+            fontSize: '0.9rem',
+            lineHeight: 1.4,
           }}
         >
-          {loading ? 'Loading...' : 'Seed Demo Data'}
-        </button>
+          Follow the steps below when demoing. This mirrors the hourly cron:
+          seed data → poll weather (auto-classifies) → auto reschedule → optional deep dive.
+        </div>
 
-        <button
-          onClick={handleListFlights}
-          disabled={loading}
-          style={{
-            padding: '0.75rem 1.5rem',
-            backgroundColor: loading ? '#94a3b8' : '#10b981',
-            color: 'white',
-            border: 'none',
-            borderRadius: '0.375rem',
-            cursor: loading ? 'not-allowed' : 'pointer',
-            fontWeight: '500',
-            fontSize: '0.875rem',
-            transition: 'background-color 0.2s',
-          }}
-          onMouseEnter={(e) => {
-            if (!loading) (e.target as HTMLButtonElement).style.backgroundColor = '#059669';
-          }}
-          onMouseLeave={(e) => {
-            if (!loading) (e.target as HTMLButtonElement).style.backgroundColor = '#10b981';
-          }}
-        >
-          {loading ? 'Loading...' : 'List Flights'}
-        </button>
-
-        <button
-          onClick={handleWeatherPoll}
-          disabled={loading}
-          style={{
-            padding: '0.75rem 1.5rem',
-            backgroundColor: loading ? '#94a3b8' : '#f59e0b',
-            color: 'white',
-            border: 'none',
-            borderRadius: '0.375rem',
-            cursor: loading ? 'not-allowed' : 'pointer',
-            fontWeight: '500',
-            fontSize: '0.875rem',
-            transition: 'background-color 0.2s',
-          }}
-          onMouseEnter={(e) => {
-            if (!loading) (e.target as HTMLButtonElement).style.backgroundColor = '#d97706';
-          }}
-          onMouseLeave={(e) => {
-            if (!loading) (e.target as HTMLButtonElement).style.backgroundColor = '#f59e0b';
-          }}
-        >
-          {loading ? 'Loading...' : 'Poll Weather'}
-        </button>
-
-        <button
-          onClick={handleAutoReschedule}
-          disabled={loading}
-          style={{
-            padding: '0.75rem 1.5rem',
-            backgroundColor: loading ? '#94a3b8' : '#8b5cf6',
-            color: 'white',
-            border: 'none',
-            borderRadius: '0.375rem',
-            cursor: loading ? 'not-allowed' : 'pointer',
-            fontWeight: '500',
-            fontSize: '0.875rem',
-            transition: 'background-color 0.2s',
-          }}
-          onMouseEnter={(e) => {
-            if (!loading) (e.target as HTMLButtonElement).style.backgroundColor = '#7c3aed';
-          }}
-          onMouseLeave={(e) => {
-            if (!loading) (e.target as HTMLButtonElement).style.backgroundColor = '#8b5cf6';
-          }}
-        >
-          {loading ? 'Loading...' : 'Auto Reschedule'}
-        </button>
-
-        <button
-          onClick={handleClassifyFlights}
-          disabled={loading}
-          style={{
-            padding: '0.75rem 1.5rem',
-            backgroundColor: loading ? '#94a3b8' : '#06b6d4',
-            color: 'white',
-            border: 'none',
-            borderRadius: '0.375rem',
-            cursor: loading ? 'not-allowed' : 'pointer',
-            fontWeight: '500',
-            fontSize: '0.875rem',
-            transition: 'background-color 0.2s',
-          }}
-          onMouseEnter={(e) => {
-            if (!loading) (e.target as HTMLButtonElement).style.backgroundColor = '#0891b2';
-          }}
-          onMouseLeave={(e) => {
-            if (!loading) (e.target as HTMLButtonElement).style.backgroundColor = '#06b6d4';
-          }}
-        >
-          {loading ? 'Loading...' : 'Classify Flights'}
-        </button>
-
-        <button
-          onClick={handleGenerateRecommendations}
-          disabled={loading}
-          style={{
-            padding: '0.75rem 1.5rem',
-            backgroundColor: loading ? '#94a3b8' : '#ec4899',
-            color: 'white',
-            border: 'none',
-            borderRadius: '0.375rem',
-            cursor: loading ? 'not-allowed' : 'pointer',
-            fontWeight: '500',
-            fontSize: '0.875rem',
-            transition: 'background-color 0.2s',
-          }}
-          onMouseEnter={(e) => {
-            if (!loading) (e.target as HTMLButtonElement).style.backgroundColor = '#db2777';
-          }}
-          onMouseLeave={(e) => {
-            if (!loading) (e.target as HTMLButtonElement).style.backgroundColor = '#ec4899';
-          }}
-        >
-          {loading ? 'Loading...' : 'Generate AI Recommendations'}
-        </button>
+        {steps.map((step, index) => (
+          <div
+            key={step.key}
+            style={{
+              display: 'flex',
+              gap: '1rem',
+              padding: '1.25rem',
+              borderRadius: '0.75rem',
+              backgroundColor: 'rgba(15, 23, 42, 0.4)',
+              border: '1px solid rgba(148, 163, 184, 0.2)',
+              alignItems: 'flex-start',
+              flexWrap: 'wrap',
+            }}
+          >
+            <div
+              style={{
+                width: '2.25rem',
+                height: '2.25rem',
+                borderRadius: '9999px',
+                backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                color: '#1d4ed8',
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}
+            >
+              {index + 1}
+            </div>
+            <div style={{ flex: '1 1 240px', minWidth: 0 }}>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600, color: '#e2e8f0' }}>
+                  {step.title}
+                </h3>
+                {step.optional && (
+                  <span
+                    style={{
+                      fontSize: '0.75rem',
+                      letterSpacing: '0.04em',
+                      padding: '0.125rem 0.5rem',
+                      borderRadius: '9999px',
+                      backgroundColor: 'rgba(148, 163, 184, 0.25)',
+                      color: '#cbd5f5',
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    Optional
+                  </span>
+                )}
+              </div>
+              <p style={{ margin: '0.5rem 0 0 0', color: '#cbd5f5', fontSize: '0.9rem', lineHeight: 1.5 }}>
+                {step.description}
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              {step.actions.map((action) => (
+                <button
+                  key={action.key}
+                  onClick={action.onClick}
+                  disabled={loading}
+                  style={action.style}
+                >
+                  {action.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
 
       {showRecommendations && recommendations.length > 0 && (
-        <div style={{ marginBottom: '2rem' }}>
+        <div style={{ marginBottom: '2rem', maxWidth: '100%', overflowX: 'hidden' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
             <h3 style={{ fontSize: '1.25rem', fontWeight: '600' }}>
               AI Reschedule Recommendations

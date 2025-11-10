@@ -3,6 +3,18 @@ main = "src/index.ts"
 compatibility_date = "2024-11-08"
 compatibility_flags = ["nodejs_compat"]
 
+workers_dev = false
+
+[[routes]]
+pattern = "airescheduler.adamwhite.work"
+custom_domain = true
+
+[observability]
+enabled = true
+
+[observability.traces]
+enabled = true
+
 # Static asset configuration for dashboard
 [site]
 bucket = "./dist/assets"

@@ -309,8 +309,22 @@ function generateFallbackRanking(
     candidateCount: candidates.length
   });
 
+  // Prefer candidates that satisfy core constraints
+  const preferredCandidates = candidates.filter((candidate) => {
+    const { constraints } = candidate;
+    return (
+      constraints.instructorAvailable &&
+      constraints.aircraftAvailable &&
+      constraints.certificationValid &&
+      constraints.withinTimeWindow &&
+      constraints.minimumSpacingMet
+    );
+  });
+
+  const rankingPool = preferredCandidates.length > 0 ? preferredCandidates : candidates;
+
   // Sort by confidence descending
-  const sorted = [...candidates].sort((a, b) => b.confidence - a.confidence);
+  const sorted = [...rankingPool].sort((a, b) => b.confidence - a.confidence);
   const topThree = sorted.slice(0, 3);
 
   return topThree.map((candidate, idx) => ({
@@ -327,11 +341,42 @@ function generateFallbackRanking(
  * @returns Generic rationale string
  */
 function getGenericRationale(candidate: CandidateSlot): string {
-  const timeStr = new Date(candidate.departureTime).toLocaleTimeString('en-US', {
+  const departureTime = new Date(candidate.departureTime);
+  const timeStr = departureTime.toLocaleString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
     hour: '2-digit',
-    minute: '2-digit'
+    minute: '2-digit',
   });
-  return `${candidate.instructorName} available at ${timeStr} on ${candidate.aircraftRegistration}. All constraints met.`;
+
+  const { constraints, notes } = candidate;
+  const unmetConstraints: string[] = [];
+
+  if (!constraints.withinTimeWindow) {
+    unmetConstraints.push('outside preferred window');
+  }
+  if (!constraints.minimumSpacingMet) {
+    unmetConstraints.push('spacing requirement');
+  }
+  if (!constraints.instructorAvailable) {
+    unmetConstraints.push('instructor conflict');
+  }
+  if (!constraints.aircraftAvailable) {
+    unmetConstraints.push('aircraft conflict');
+  }
+  if (!constraints.certificationValid) {
+    unmetConstraints.push('certification mismatch');
+  }
+
+  const constraintSummary =
+    unmetConstraints.length === 0
+      ? 'All scheduling checks passed.'
+      : `Needs attention: ${unmetConstraints.join(', ')}.`;
+
+  const noteSummary = notes ? ` ${notes}` : '';
+
+  return `${candidate.instructorName} available ${timeStr} on ${candidate.aircraftRegistration}. ${constraintSummary}${noteSummary}`;
 }
 
 // ========================================

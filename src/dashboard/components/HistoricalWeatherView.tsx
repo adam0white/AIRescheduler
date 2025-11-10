@@ -13,6 +13,7 @@ export function HistoricalWeatherView() {
   const [snapshots, setSnapshots] = useState<WeatherSnapshot[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hasQueried, setHasQueried] = useState(false);
 
   // Default to last 7 days
   const defaultEndDate = new Date();
@@ -29,6 +30,7 @@ export function HistoricalWeatherView() {
     }
 
     setLoading(true);
+    setHasQueried(true);
     setError(null);
     try {
       const { result } = await call('getWeatherSnapshots', {
@@ -132,7 +134,12 @@ export function HistoricalWeatherView() {
             id="flightId"
             type="number"
             value={flightId}
-            onChange={(e) => setFlightId(e.target.value)}
+            onChange={(e) => {
+              setFlightId(e.target.value);
+              setHasQueried(false);
+              setSnapshots([]);
+              setError(null);
+            }}
             placeholder="Enter flight ID"
             style={{
               width: '100%',
@@ -337,7 +344,7 @@ export function HistoricalWeatherView() {
         </div>
       )}
 
-      {!loading && snapshots.length === 0 && flightId && (
+      {!loading && snapshots.length === 0 && hasQueried && (
         <div
           style={{
             padding: '2rem',

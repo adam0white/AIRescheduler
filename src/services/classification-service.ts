@@ -163,12 +163,6 @@ async function getFlightWeatherSnapshots(
     [flightId, flightId]
   );
 
-  ctx.logger.info('Weather snapshots retrieved', {
-    flightId,
-    snapshotCount: snapshots.length,
-    checkpoints: snapshots.map((s) => s.checkpoint_type),
-  });
-
   return snapshots;
 }
 
@@ -249,6 +243,10 @@ async function classifyFlight(
     departureTime: flight.departure_time,
   });
 
+  const { hoursUntilDeparture, isWithinRescheduleWindow } = calculateTimeHorizon(
+    flight.departure_time
+  );
+
   // Get training threshold
   const trainingLevel = flight.training_level as 'student' | 'private' | 'instrument';
   const threshold = await getTrainingThreshold(ctx, trainingLevel);
@@ -263,7 +261,7 @@ async function classifyFlight(
       weatherStatus: 'unknown',
       reason: `Training threshold not found for level: ${trainingLevel}`,
       breachedCheckpoints: [],
-      hoursUntilDeparture: 0,
+      hoursUntilDeparture,
     };
   }
 
@@ -287,20 +285,9 @@ async function classifyFlight(
       weatherStatus: 'unknown',
       reason: `Missing weather data for checkpoints: ${missingCheckpoints.join(', ')}`,
       breachedCheckpoints: [],
-      hoursUntilDeparture: 0,
+      hoursUntilDeparture,
     };
   }
-
-  // Calculate time horizon
-  const { hoursUntilDeparture, isWithinRescheduleWindow } = calculateTimeHorizon(
-    flight.departure_time
-  );
-
-  ctx.logger.info('Time horizon calculated', {
-    flightId: flight.id,
-    hoursUntilDeparture: Math.round(hoursUntilDeparture),
-    isWithinRescheduleWindow,
-  });
 
   // Evaluate each checkpoint
   const breachedCheckpoints: CheckpointBreach[] = [];
@@ -308,22 +295,6 @@ async function classifyFlight(
 
   for (const snapshot of snapshots) {
     const evaluation = evaluateWeatherConditions(snapshot, threshold);
-
-    ctx.logger.info('Evaluating checkpoint', {
-      flightId: flight.id,
-      checkpointType: snapshot.checkpoint_type,
-      conditions: {
-        wind: snapshot.wind_speed,
-        visibility: snapshot.visibility,
-        ceiling: snapshot.ceiling,
-      },
-      thresholds: {
-        maxWind: threshold.max_wind_speed,
-        minVis: threshold.min_visibility,
-        minCeiling: threshold.min_ceiling,
-      },
-      passed: evaluation.passed,
-    });
 
     if (!evaluation.passed) {
       allCheckpointsPassed = false;
@@ -395,12 +366,14 @@ async function classifyFlight(
     [weatherStatus, new Date().toISOString(), flight.id]
   );
 
-  ctx.logger.info('Flight classified', {
-    flightId: flight.id,
-    weatherStatus,
-    hoursUntilDeparture: Math.round(hoursUntilDeparture),
-    breachedCheckpoints: breachedCheckpoints.length,
-  });
+  if (weatherStatus !== 'clear') {
+    ctx.logger.info('Flight classified', {
+      flightId: flight.id,
+      weatherStatus,
+      hoursUntilDeparture: Math.round(hoursUntilDeparture),
+      breachedCheckpoints: breachedCheckpoints.length,
+    });
+  }
 
   return {
     flightId: flight.id,
@@ -482,12 +455,13 @@ export async function classifyFlights(
         });
 
         // Add error result
+        const { hoursUntilDeparture } = calculateTimeHorizon(flight.departure_time);
         results.push({
           flightId: flight.id,
           weatherStatus: 'unknown',
           reason: `Classification error: ${error instanceof Error ? error.message : 'Unknown error'}`,
           breachedCheckpoints: [],
-          hoursUntilDeparture: 0,
+          hoursUntilDeparture,
         });
       }
     }
