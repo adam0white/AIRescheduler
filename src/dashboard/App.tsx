@@ -8,6 +8,7 @@ import { TestingControls } from './components/TestingControls';
 import { FlightStatusBoard } from './components/FlightStatusBoard';
 import { HistoricalWeatherView } from './components/HistoricalWeatherView';
 import { CronStatusMonitor } from './components/CronStatusMonitor';
+import { NotificationTray } from './components/NotificationTray';
 
 export function App() {
   const [activeView, setActiveView] = useState<'flights' | 'history' | 'cron'>('flights');
@@ -42,53 +43,57 @@ export function App() {
             AIRescheduler Dashboard
           </h1>
 
-          <nav style={{ display: 'flex', gap: '0.5rem' }}>
-            <button
-              onClick={() => setActiveView('flights')}
-              style={{
-                padding: '0.5rem 1rem',
-                borderRadius: '0.375rem',
-                backgroundColor: activeView === 'flights' ? '#3b82f6' : '#374151',
-                color: '#ffffff',
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: '0.875rem',
-                fontWeight: 500,
-              }}
-            >
-              Flight Status
-            </button>
-            <button
-              onClick={() => setActiveView('history')}
-              style={{
-                padding: '0.5rem 1rem',
-                borderRadius: '0.375rem',
-                backgroundColor: activeView === 'history' ? '#3b82f6' : '#374151',
-                color: '#ffffff',
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: '0.875rem',
-                fontWeight: 500,
-              }}
-            >
-              Weather History
-            </button>
-            <button
-              onClick={() => setActiveView('cron')}
-              style={{
-                padding: '0.5rem 1rem',
-                borderRadius: '0.375rem',
-                backgroundColor: activeView === 'cron' ? '#3b82f6' : '#374151',
-                color: '#ffffff',
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: '0.875rem',
-                fontWeight: 500,
-              }}
-            >
-              Cron Status
-            </button>
-          </nav>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <nav style={{ display: 'flex', gap: '0.5rem' }}>
+              <button
+                onClick={() => setActiveView('flights')}
+                style={{
+                  padding: '0.5rem 1rem',
+                  borderRadius: '0.375rem',
+                  backgroundColor: activeView === 'flights' ? '#3b82f6' : '#374151',
+                  color: '#ffffff',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: '0.875rem',
+                  fontWeight: 500,
+                }}
+              >
+                Flight Status
+              </button>
+              <button
+                onClick={() => setActiveView('history')}
+                style={{
+                  padding: '0.5rem 1rem',
+                  borderRadius: '0.375rem',
+                  backgroundColor: activeView === 'history' ? '#3b82f6' : '#374151',
+                  color: '#ffffff',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: '0.875rem',
+                  fontWeight: 500,
+                }}
+              >
+                Weather History
+              </button>
+              <button
+                onClick={() => setActiveView('cron')}
+                style={{
+                  padding: '0.5rem 1rem',
+                  borderRadius: '0.375rem',
+                  backgroundColor: activeView === 'cron' ? '#3b82f6' : '#374151',
+                  color: '#ffffff',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: '0.875rem',
+                  fontWeight: 500,
+                }}
+              >
+                Cron Status
+              </button>
+            </nav>
+
+            <NotificationTray />
+          </div>
         </div>
       </header>
 

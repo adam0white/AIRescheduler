@@ -20,6 +20,8 @@ import {
   RecordManagerDecisionRequest,
   GetFlightRescheduleHistoryRequest,
   GetCronRunsRequest,
+  GetRecentNotificationsRequest,
+  UpdateNotificationStatusRequest,
 } from './schema';
 import * as weatherService from '../services/weather-service';
 import * as reschedulerService from '../services/rescheduler';
@@ -30,6 +32,7 @@ import * as candidateSlotService from '../services/candidate-slot-service';
 import * as aiRescheduleService from '../services/ai-reschedule-service';
 import * as rescheduleActionService from '../services/reschedule-action-service';
 import * as cronMonitoringService from '../services/cron-monitoring-service';
+import * as notificationService from '../services/notification-service';
 import { generateCorrelationId, createContext } from '../lib/logger';
 
 /**
@@ -200,6 +203,23 @@ export async function handleRpc(request: Request, env: Env): Promise<Response> {
             runs: cronRuns,
             totalCount: cronRuns.length,
           };
+          break;
+        }
+
+        case 'getRecentNotifications': {
+          const { limit = 10, type } = validation.data as GetRecentNotificationsRequest;
+          result = await notificationService.getRecentNotifications(ctx, limit, type);
+          break;
+        }
+
+        case 'updateNotificationStatus': {
+          const { notificationId, status } = validation.data as UpdateNotificationStatusRequest;
+          const success = await notificationService.updateNotificationStatus(
+            ctx,
+            notificationId,
+            status
+          );
+          result = { success };
           break;
         }
 
