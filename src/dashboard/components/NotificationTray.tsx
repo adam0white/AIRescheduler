@@ -158,6 +158,16 @@ export function NotificationTray() {
     }
   }, [isOpen]);
 
+  useEffect(() => {
+    if (isOpen) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [isOpen]);
+
   return (
     <div ref={trayRef} style={{ position: 'relative' }}>
       {/* Bell icon with badge */}
@@ -246,9 +256,26 @@ export function NotificationTray() {
               fontWeight: 'bold',
               fontSize: '1rem',
               color: colors.lightText,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
             }}
           >
             Notifications
+            <button
+              onClick={() => setIsOpen(false)}
+              style={{
+                background: 'rgba(15, 23, 42, 0.35)',
+                border: `1px solid ${colors.divider}`,
+                color: colors.lightText,
+                borderRadius: '9999px',
+                padding: '0.2rem 0.6rem',
+                fontSize: '0.75rem',
+                cursor: 'pointer',
+              }}
+            >
+              Close
+            </button>
           </div>
 
           {/* Notifications list */}
@@ -365,6 +392,19 @@ export function NotificationTray() {
             )}
           </div>
         </div>
+      )}
+
+      {isOpen && (
+        <div
+          onClick={() => setIsOpen(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.55)',
+            backdropFilter: 'blur(3px)',
+            zIndex: 999,
+          }}
+        />
       )}
     </div>
   );

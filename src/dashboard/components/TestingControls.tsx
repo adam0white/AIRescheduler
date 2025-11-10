@@ -3,7 +3,7 @@
  * Provides manual testing controls for RPC methods
  */
 
-import { useState } from 'react';
+import { CSSProperties, useMemo, useState } from 'react';
 import { useRpc } from '../hooks/useRpc';
 import { RescheduleRecommendationCard } from './RescheduleRecommendationCard';
 
@@ -14,13 +14,45 @@ interface ToastMessage {
   correlationId?: string;
 }
 
-export function TestingControls() {
+interface TestingControlsProps {
+  layout?: 'standalone' | 'overlay';
+  onClose?: () => void;
+}
+
+export function TestingControls({ layout = 'standalone', onClose }: TestingControlsProps) {
   const { call, loading, error } = useRpc();
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [lastResult, setLastResult] = useState<string | null>(null);
   const [recommendations, setRecommendations] = useState<any[]>([]);
   const [recommendationsMetadata, setRecommendationsMetadata] = useState<any>(null);
   const [showRecommendations, setShowRecommendations] = useState(false);
+
+  const containerStyles = useMemo<CSSProperties>(
+    () => ({
+      padding: layout === 'overlay' ? '1.5rem' : '2rem',
+      maxWidth: layout === 'overlay' ? '100%' : '1200px',
+      margin: layout === 'overlay' ? '0' : '0 auto',
+      background:
+        layout === 'overlay'
+          ? 'linear-gradient(135deg, rgba(30, 64, 175, 0.12), rgba(12, 74, 110, 0.22))'
+          : 'transparent',
+      borderRadius: layout === 'overlay' ? '0.75rem' : undefined,
+    }),
+    [layout]
+  );
+
+  const headingStyles = useMemo<CSSProperties>(
+    () => ({
+      fontSize: '1.5rem',
+      fontWeight: 'bold',
+      marginBottom: '1rem',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: '1rem',
+    }),
+    []
+  );
 
   const showToast = (type: 'success' | 'error', message: string, correlationId?: string) => {
     const id = `toast-${Date.now()}`;
@@ -166,10 +198,27 @@ export function TestingControls() {
   };
 
   return (
-    <div style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto' }}>
-      <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1rem' }}>
-        Testing Controls
-      </h2>
+    <div style={containerStyles}>
+      <div style={headingStyles}>
+        <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 'bold' }}>Testing Controls</h2>
+        {layout === 'overlay' && (
+          <button
+            onClick={onClose}
+            style={{
+              padding: '0.35rem 0.9rem',
+              borderRadius: '9999px',
+              border: '1px solid rgba(226, 232, 240, 0.45)',
+              backgroundColor: 'rgba(15, 23, 42, 0.35)',
+              color: '#e2e8f0',
+              fontSize: '0.75rem',
+              letterSpacing: '0.04em',
+              cursor: 'pointer',
+            }}
+          >
+            Close
+          </button>
+        )}
+      </div>
 
       <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
         <button

@@ -31,6 +31,12 @@ interface LastRunSummaryCardProps {
     text: string;
     label: string;
   };
+  trendSummary: {
+    successStreak: number;
+    failuresIn24h: number;
+    averageDurationIn24h: number | null;
+    lastIncidentRun: CronRun | null;
+  } | null;
 }
 
 export function LastRunSummaryCard({
@@ -38,8 +44,13 @@ export function LastRunSummaryCard({
   formatDuration,
   formatRelativeTime,
   getStatusColor,
+  trendSummary,
 }: LastRunSummaryCardProps) {
   const statusColor = getStatusColor(run.status);
+  const averageDurationLabel =
+    trendSummary && trendSummary.averageDurationIn24h !== null
+      ? formatDuration(trendSummary.averageDurationIn24h)
+      : '—';
 
   return (
     <div className={styles.card}>
@@ -55,6 +66,39 @@ export function LastRunSummaryCard({
           {statusColor.label}
         </div>
       </div>
+
+      {trendSummary && (
+        <div className={styles.trendBar}>
+          <div>
+            <div className={styles.trendLabel}>Success Streak</div>
+            <div className={styles.trendValue}>{trendSummary.successStreak} run(s)</div>
+          </div>
+          <div>
+            <div className={styles.trendLabel}>Failures (24h)</div>
+            <div
+              className={`${styles.trendValue} ${
+                trendSummary.failuresIn24h > 0 ? styles.trendValueWarning : styles.trendValueSuccess
+              }`}
+            >
+              {trendSummary.failuresIn24h}
+            </div>
+          </div>
+          <div>
+            <div className={styles.trendLabel}>Avg Duration (24h)</div>
+            <div className={styles.trendValue}>{averageDurationLabel}</div>
+          </div>
+          <div>
+            <div className={styles.trendLabel}>Last Incident</div>
+            <div className={styles.trendValue}>
+              {trendSummary.lastIncidentRun
+                ? `${trendSummary.lastIncidentRun.status.toUpperCase()} · ${formatRelativeTime(
+                    trendSummary.lastIncidentRun.completedAt
+                  )}`
+                : 'No incidents in history window'}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className={styles.twoColumnGrid}>
         <div>

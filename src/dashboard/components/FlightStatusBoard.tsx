@@ -3,9 +3,13 @@
  * Displays flights with weather status badges and detailed checkpoint information
  */
 
-import { useState, useEffect } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useRpc } from '../hooks/useRpc';
 import { WeatherTimeline } from './WeatherTimeline';
+
+type WeatherStatus = 'clear' | 'advisory' | 'auto-reschedule' | 'unknown';
+
+const STATUS_ORDER: WeatherStatus[] = ['auto-reschedule', 'advisory', 'unknown', 'clear'];
 
 interface Flight {
   id: number;
@@ -17,7 +21,7 @@ interface Flight {
   departureAirport: string;
   arrivalAirport: string;
   status: string;
-  weatherStatus: 'clear' | 'advisory' | 'auto-reschedule' | 'unknown';
+  weatherStatus: WeatherStatus;
 }
 
 interface CheckpointBreach {
@@ -56,6 +60,11 @@ export function FlightStatusBoard() {
   );
   const [expandedFlight, setExpandedFlight] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<'all' | WeatherStatus>('all');
+  const [departureWindow, setDepartureWindow] = useState<'all' | 'imminent' | 'upcoming' | 'later'>(
+    'all'
+  );
+  const [showOnlyActionable, setShowOnlyActionable] = useState(false);
 
   const loadFlights = async () => {
     setLoading(true);
@@ -84,19 +93,35 @@ export function FlightStatusBoard() {
     loadFlights();
   }, []);
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'clear':
-        return { bg: '#10b981', text: 'Clear' };
-      case 'advisory':
-        return { bg: '#f59e0b', text: 'Advisory' };
-      case 'auto-reschedule':
-        return { bg: '#ef4444', text: 'Auto-Reschedule' };
-      case 'unknown':
-      default:
-        return { bg: '#6b7280', text: 'Unknown' };
-    }
-  };
+  const statusVisuals = useMemo(
+    () => ({
+      clear: {
+        bg: 'rgba(16, 185, 129, 0.18)',
+        badge: '#10b981',
+        text: 'Clear',
+        border: '1px solid rgba(16, 185, 129, 0.45)',
+      },
+      advisory: {
+        bg: 'rgba(245, 158, 11, 0.14)',
+        badge: '#f59e0b',
+        text: 'Advisory',
+        border: '1px solid rgba(245, 158, 11, 0.45)',
+      },
+      'auto-reschedule': {
+        bg: 'rgba(239, 68, 68, 0.14)',
+        badge: '#ef4444',
+        text: 'Auto-Reschedule',
+        border: '1px solid rgba(239, 68, 68, 0.45)',
+      },
+      unknown: {
+        bg: 'rgba(148, 163, 184, 0.16)',
+        badge: '#64748b',
+        text: 'Unknown',
+        border: '1px solid rgba(148, 163, 184, 0.35)',
+      },
+    }),
+    []
+  );
 
   const formatDateTime = (isoString: string) => {
     const date = new Date(isoString);
@@ -112,6 +137,74 @@ export function FlightStatusBoard() {
     setExpandedFlight(expandedFlight === flightId ? null : flightId);
   };
 
+  const getHoursUntilDeparture = (flight: Flight, classification?: ClassificationResult) => {
+    if (classification) {
+      return classification.hoursUntilDeparture;
+    }
+    const diffMs = new Date(flight.departureTime).getTime() - Date.now();
+    return diffMs / (1000 * 60 * 60);
+  };
+
+  const filteredFlights = useMemo(() => {
+    return flights.filter((flight) => {
+      const classification = classifications.get(flight.id);
+      const hoursUntilDeparture = Math.max(0, getHoursUntilDeparture(flight, classification));
+
+      if (statusFilter !== 'all' && flight.weatherStatus !== statusFilter) {
+        return false;
+      }
+
+      if (showOnlyActionable && flight.weatherStatus === 'clear') {
+        return false;
+      }
+
+      if (departureWindow !== 'all') {
+        const windowMatches =
+          (departureWindow === 'imminent' && hoursUntilDeparture < 24) ||
+          (departureWindow === 'upcoming' && hoursUntilDeparture >= 24 && hoursUntilDeparture < 72) ||
+          (departureWindow === 'later' && hoursUntilDeparture >= 72);
+
+        if (!windowMatches) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [classifications, departureWindow, flights, showOnlyActionable, statusFilter]);
+
+  const groupedFlights = useMemo(() => {
+    const bucket = new Map<WeatherStatus, Flight[]>();
+    STATUS_ORDER.forEach((status) => bucket.set(status, []));
+
+    filteredFlights.forEach((flight) => {
+      const existing = bucket.get(flight.weatherStatus);
+      if (existing) {
+        existing.push(flight);
+      }
+    });
+
+    STATUS_ORDER.forEach((status) => {
+      const arr = bucket.get(status);
+      if (arr) {
+        arr.sort((a, b) => {
+          const aClassification = classifications.get(a.id);
+          const bClassification = classifications.get(b.id);
+          const aHours = getHoursUntilDeparture(a, aClassification);
+          const bHours = getHoursUntilDeparture(b, bClassification);
+          return aHours - bHours;
+        });
+      }
+    });
+
+    return STATUS_ORDER
+      .map((status) => ({
+        status,
+        flights: bucket.get(status) || [],
+      }))
+      .filter((group) => group.flights.length > 0);
+  }, [classifications, filteredFlights]);
+
   if (loading) {
     return (
       <div style={{ padding: '2rem', textAlign: 'center' }}>
@@ -125,276 +218,460 @@ export function FlightStatusBoard() {
       <div
         style={{
           display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '1.5rem',
+          flexDirection: 'column',
+          gap: '1.5rem',
         }}
       >
-        <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: 0 }}>
-          Flight Status Board
-        </h2>
-        <button
-          onClick={loadFlights}
-          style={{
-            padding: '0.5rem 1rem',
-            backgroundColor: '#3b82f6',
-            color: 'white',
-            border: 'none',
-            borderRadius: '0.375rem',
-            cursor: 'pointer',
-            fontSize: '0.875rem',
-          }}
-        >
-          Refresh
-        </button>
-      </div>
-
-      {flights.length === 0 ? (
         <div
           style={{
-            padding: '3rem',
-            textAlign: 'center',
-            backgroundColor: '#1f2937',
-            borderRadius: '0.5rem',
+            display: 'flex',
+            flexWrap: 'wrap',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: '1rem',
           }}
         >
-          <p style={{ fontSize: '1.125rem', color: '#9ca3af' }}>
-            No flights scheduled. Click "Seed Demo Data" to add sample flights.
-          </p>
+          <div>
+            <h2 style={{ fontSize: '1.6rem', fontWeight: 700, margin: 0 }}>Flight Status Board</h2>
+            <p style={{ margin: '0.25rem 0 0 0', color: '#94a3b8', fontSize: '0.875rem' }}>
+              Track classifications, weather risk, and upcoming departures.
+            </p>
+          </div>
+          <button
+            onClick={loadFlights}
+            style={{
+              padding: '0.6rem 1.1rem',
+              background: 'linear-gradient(135deg, #2563eb 0%, #38bdf8 100%)',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '0.5rem',
+              cursor: 'pointer',
+              fontSize: '0.85rem',
+              fontWeight: 600,
+              boxShadow: '0 10px 25px -12px rgba(37, 99, 235, 0.6)',
+            }}
+          >
+            Refresh Data
+          </button>
         </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          {flights.map((flight) => {
-            const classification = classifications.get(flight.id);
-            const statusColor = getStatusColor(flight.weatherStatus);
-            const isExpanded = expandedFlight === flight.id;
 
-            return (
-              <div
-                key={flight.id}
-                style={{
-                  backgroundColor: '#1f2937',
-                  borderRadius: '0.5rem',
-                  padding: '1.5rem',
-                  border: '1px solid #374151',
-                }}
-              >
-                {/* Flight Header */}
-                <div
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '0.75rem',
+            padding: '1rem',
+            borderRadius: '0.75rem',
+            backgroundColor: 'rgba(15, 23, 42, 0.65)',
+            border: '1px solid rgba(148, 163, 184, 0.3)',
+          }}
+        >
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: '#94a3b8' }}>
+              Status
+            </span>
+            {(['all', ...STATUS_ORDER] as const).map((statusKey) => {
+              const isActive = statusFilter === statusKey;
+              const label =
+                statusKey === 'all'
+                  ? 'All'
+                  : statusVisuals[statusKey].text;
+              return (
+                <button
+                  key={statusKey}
+                  onClick={() => setStatusFilter(statusKey)}
                   style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'flex-start',
-                    marginBottom: '1rem',
+                    padding: '0.35rem 0.8rem',
+                    borderRadius: '9999px',
+                    border: isActive ? '1px solid rgba(255,255,255,0.35)' : '1px solid rgba(148,163,184,0.3)',
+                    backgroundColor: isActive
+                      ? 'rgba(59, 130, 246, 0.25)'
+                      : 'rgba(15, 23, 42, 0.35)',
+                    color: '#e2e8f0',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    letterSpacing: '0.02em',
                   }}
                 >
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                      <h3 style={{ fontSize: '1.125rem', fontWeight: '600', margin: 0 }}>
-                        Flight #{flight.id}
-                      </h3>
-                      <span
-                        style={{
-                          padding: '0.25rem 0.75rem',
-                          backgroundColor: statusColor.bg,
-                          color: 'white',
-                          borderRadius: '0.25rem',
-                          fontSize: '0.75rem',
-                          fontWeight: '500',
-                        }}
-                      >
-                        {statusColor.text}
-                      </span>
-                    </div>
-                    <p style={{ margin: '0.5rem 0', color: '#9ca3af', fontSize: '0.875rem' }}>
-                      {flight.studentName} with {flight.instructorName} • {flight.aircraftRegistration}
-                    </p>
-                  </div>
+                  {label}
+                </button>
+              );
+            })}
+          </div>
 
-                  {classification && (
-                    <button
-                      onClick={() => toggleExpand(flight.id)}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: '#94a3b8' }}>
+              Departure Window
+            </span>
+            {(['all', 'imminent', 'upcoming', 'later'] as const).map((windowKey) => {
+              const isActive = departureWindow === windowKey;
+              const labelMap = {
+                all: 'Any',
+                imminent: '< 24h',
+                upcoming: '24-72h',
+                later: '> 72h',
+              } as const;
+              return (
+                <button
+                  key={windowKey}
+                  onClick={() => setDepartureWindow(windowKey)}
+                  style={{
+                    padding: '0.35rem 0.8rem',
+                    borderRadius: '0.5rem',
+                    border: isActive ? '1px solid rgba(59,130,246,0.45)' : '1px solid rgba(148,163,184,0.25)',
+                    backgroundColor: isActive ? 'rgba(59, 130, 246, 0.18)' : 'rgba(15, 23, 42, 0.35)',
+                    color: '#e2e8f0',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {labelMap[windowKey]}
+                </button>
+              );
+            })}
+          </div>
+
+          <label
+            style={{
+              marginLeft: 'auto',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              fontSize: '0.75rem',
+              color: '#cbd5f5',
+              cursor: 'pointer',
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={showOnlyActionable}
+              onChange={(event) => setShowOnlyActionable(event.target.checked)}
+              style={{
+                width: '16px',
+                height: '16px',
+                accentColor: '#3b82f6',
+              }}
+            />
+            Focus on action needed
+          </label>
+        </div>
+
+        {flights.length === 0 ? (
+          <div
+            style={{
+              padding: '3rem',
+              textAlign: 'center',
+              backgroundColor: '#111827',
+              borderRadius: '0.75rem',
+              border: '1px dashed rgba(148, 163, 184, 0.4)',
+            }}
+          >
+            <p style={{ fontSize: '1.125rem', color: '#9ca3af' }}>
+              No flights scheduled. Trigger `Seed Demo Data` to populate the board.
+            </p>
+          </div>
+        ) : groupedFlights.length === 0 ? (
+          <div
+            style={{
+              padding: '2.5rem',
+              borderRadius: '0.75rem',
+              backgroundColor: 'rgba(15, 23, 42, 0.75)',
+              border: '1px solid rgba(59, 130, 246, 0.35)',
+              textAlign: 'center',
+              color: '#cbd5f5',
+            }}
+          >
+            <p style={{ margin: 0, fontSize: '0.95rem' }}>
+              Nothing matches the current filters—loosen them to see more flights.
+            </p>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            {groupedFlights.map(({ status, flights: statusFlights }) => {
+              const visuals = statusVisuals[status];
+              return (
+                <div key={status} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <div
                       style={{
-                        padding: '0.5rem 1rem',
-                        backgroundColor: '#374151',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '0.375rem',
-                        cursor: 'pointer',
-                        fontSize: '0.875rem',
+                        width: '10px',
+                        height: '10px',
+                        borderRadius: '9999px',
+                        backgroundColor: visuals.badge,
+                        filter: 'drop-shadow(0 0 6px rgba(59, 130, 246, 0.45))',
                       }}
-                    >
-                      {isExpanded ? 'Hide Details' : 'Show Details'}
-                    </button>
-                  )}
-                </div>
-
-                {/* Flight Info */}
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                    gap: '1rem',
-                    marginBottom: '1rem',
-                  }}
-                >
-                  <div>
-                    <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: 0 }}>
-                      Departure
-                    </p>
-                    <p style={{ fontSize: '0.875rem', fontWeight: '500', margin: '0.25rem 0' }}>
-                      {flight.departureAirport}
-                    </p>
-                    <p style={{ fontSize: '0.75rem', color: '#9ca3af', margin: 0 }}>
-                      {formatDateTime(flight.departureTime)}
-                    </p>
+                    />
+                    <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>
+                      {visuals.text} <span style={{ color: '#64748b' }}>({statusFlights.length})</span>
+                    </h3>
                   </div>
-                  <div>
-                    <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: 0 }}>Arrival</p>
-                    <p style={{ fontSize: '0.875rem', fontWeight: '500', margin: '0.25rem 0' }}>
-                      {flight.arrivalAirport}
-                    </p>
-                    <p style={{ fontSize: '0.75rem', color: '#9ca3af', margin: 0 }}>
-                      {formatDateTime(flight.arrivalTime)}
-                    </p>
-                  </div>
-                  {classification && (
-                    <div>
-                      <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: 0 }}>
-                        Time to Departure
-                      </p>
-                      <p style={{ fontSize: '0.875rem', fontWeight: '500', margin: '0.25rem 0' }}>
-                        {Math.round(classification.hoursUntilDeparture)}h
-                      </p>
-                      <p style={{ fontSize: '0.75rem', color: '#9ca3af', margin: 0 }}>
-                        {classification.hoursUntilDeparture < 72 ? '<72h window' : '≥72h window'}
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Classification Reason */}
-                {classification && (
                   <div
                     style={{
-                      padding: '0.75rem',
-                      backgroundColor: '#111827',
-                      borderRadius: '0.375rem',
-                      marginBottom: isExpanded ? '1rem' : 0,
+                      display: 'grid',
+                      gap: '1rem',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
                     }}
                   >
-                    <p style={{ fontSize: '0.875rem', margin: 0, color: '#d1d5db' }}>
-                      {classification.reason}
-                    </p>
-                  </div>
-                )}
+                    {statusFlights.map((flight) => {
+                      const classification = classifications.get(flight.id);
+                      const hoursUntilDeparture = getHoursUntilDeparture(flight, classification);
+                      const roundedHours = Math.max(0, Math.round(hoursUntilDeparture));
+                      const isExpanded = expandedFlight === flight.id;
+                      const primaryThresholds =
+                        classification?.breachedCheckpoints?.[0]?.thresholds;
 
-                {/* Expanded Checkpoint Details */}
-                {isExpanded && classification && classification.breachedCheckpoints.length > 0 && (
-                  <div
-                    style={{
-                      marginTop: '1rem',
-                      padding: '1rem',
-                      backgroundColor: '#111827',
-                      borderRadius: '0.375rem',
-                    }}
-                  >
-                    <h4 style={{ fontSize: '0.875rem', fontWeight: '600', marginBottom: '0.75rem' }}>
-                      Breached Checkpoints:
-                    </h4>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                      {classification.breachedCheckpoints.map((checkpoint, idx) => (
+                      return (
                         <div
-                          key={idx}
+                          key={flight.id}
                           style={{
-                            padding: '0.75rem',
-                            backgroundColor: '#1f2937',
-                            borderRadius: '0.375rem',
-                            borderLeft: '3px solid #ef4444',
+                            background: `linear-gradient(165deg, rgba(15, 23, 42, 0.95) 0%, rgba(15, 23, 42, 0.75) 65%, ${visuals.bg} 100%)`,
+                            borderRadius: '0.75rem',
+                            padding: '1.25rem',
+                            border: visuals.border,
+                            boxShadow: '0 20px 45px -30px rgba(15, 23, 42, 0.8)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '1rem',
                           }}
                         >
-                          <p
-                            style={{
-                              fontSize: '0.875rem',
-                              fontWeight: '600',
-                              margin: '0 0 0.5rem 0',
-                              textTransform: 'capitalize',
-                            }}
-                          >
-                            {checkpoint.checkpointType} ({checkpoint.location})
-                          </p>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem' }}>
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>
+                                  Flight #{flight.id}
+                                </h4>
+                                <span
+                                  style={{
+                                    padding: '0.2rem 0.65rem',
+                                    borderRadius: '9999px',
+                                    fontSize: '0.7rem',
+                                    fontWeight: 600,
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.08em',
+                                    backgroundColor: visuals.badge,
+                                    color: '#0f172a',
+                                  }}
+                                >
+                                  {visuals.text}
+                                </span>
+                              </div>
+                              <p style={{ margin: '0.4rem 0 0 0', color: '#cbd5f5', fontSize: '0.85rem' }}>
+                                {flight.studentName} with {flight.instructorName} • {flight.aircraftRegistration}
+                              </p>
+                            </div>
+                            {classification && (
+                              <button
+                                onClick={() => toggleExpand(flight.id)}
+                                style={{
+                                  alignSelf: 'flex-start',
+                                  padding: '0.45rem 0.75rem',
+                                  borderRadius: '0.5rem',
+                                  border: '1px solid rgba(148, 163, 184, 0.35)',
+                                  backgroundColor: 'rgba(15, 23, 42, 0.45)',
+                                  color: '#e2e8f0',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 600,
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                {isExpanded ? 'Collapse' : 'Expand'}
+                              </button>
+                            )}
+                          </div>
+
                           <div
                             style={{
                               display: 'grid',
-                              gridTemplateColumns: 'repeat(3, 1fr)',
-                              gap: '0.5rem',
-                              fontSize: '0.75rem',
+                              gap: '0.75rem',
+                              gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+                              fontSize: '0.8rem',
                             }}
                           >
                             <div>
-                              <p style={{ color: '#6b7280', margin: 0 }}>Wind Speed</p>
-                              <p
-                                style={{
-                                  margin: '0.25rem 0 0 0',
-                                  color: checkpoint.breaches.wind ? '#ef4444' : '#10b981',
-                                }}
-                              >
-                                {checkpoint.conditions.windSpeed} kt (max: {checkpoint.thresholds.maxWind})
-                              </p>
+                              <span style={{ color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                                Departure
+                              </span>
+                              <div style={{ fontSize: '0.9rem', fontWeight: 600, marginTop: '0.25rem' }}>
+                                {flight.departureAirport}
+                              </div>
+                              <div style={{ color: '#94a3b8', marginTop: '0.15rem' }}>
+                                {formatDateTime(flight.departureTime)}
+                              </div>
                             </div>
                             <div>
-                              <p style={{ color: '#6b7280', margin: 0 }}>Visibility</p>
-                              <p
-                                style={{
-                                  margin: '0.25rem 0 0 0',
-                                  color: checkpoint.breaches.visibility ? '#ef4444' : '#10b981',
-                                }}
-                              >
-                                {checkpoint.conditions.visibility} mi (min: {checkpoint.thresholds.minVisibility})
-                              </p>
+                              <span style={{ color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                                Arrival
+                              </span>
+                              <div style={{ fontSize: '0.9rem', fontWeight: 600, marginTop: '0.25rem' }}>
+                                {flight.arrivalAirport}
+                              </div>
+                              <div style={{ color: '#94a3b8', marginTop: '0.15rem' }}>
+                                {formatDateTime(flight.arrivalTime)}
+                              </div>
                             </div>
                             <div>
-                              <p style={{ color: '#6b7280', margin: 0 }}>Ceiling</p>
-                              <p
-                                style={{
-                                  margin: '0.25rem 0 0 0',
-                                  color: checkpoint.breaches.ceiling ? '#ef4444' : '#10b981',
-                                }}
-                              >
-                                {checkpoint.conditions.ceiling === null
-                                  ? 'Unlimited'
-                                  : `${checkpoint.conditions.ceiling} ft`}{' '}
-                                (min: {checkpoint.thresholds.minCeiling})
-                              </p>
+                              <span style={{ color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                                Countdown
+                              </span>
+                              <div style={{ fontSize: '0.9rem', fontWeight: 600, marginTop: '0.25rem' }}>
+                                {roundedHours}h
+                              </div>
+                              <div style={{ color: '#94a3b8', marginTop: '0.15rem' }}>
+                                {hoursUntilDeparture < 72
+                                  ? '<72h window'
+                                  : '≥72h window'}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
 
-                {/* Weather Timeline */}
-                {isExpanded && classification && (
-                  <div style={{ marginTop: '1rem' }}>
-                    <WeatherTimeline
-                      flightId={flight.id}
-                      departureTime={flight.departureTime}
-                      arrivalTime={flight.arrivalTime}
-                      thresholds={
-                        classification.breachedCheckpoints.length > 0 &&
-                        classification.breachedCheckpoints[0]
-                          ? classification.breachedCheckpoints[0].thresholds
-                          : undefined
-                      }
-                    />
+                          {classification && (
+                            <div
+                              style={{
+                                padding: '0.75rem',
+                                borderRadius: '0.65rem',
+                                backgroundColor: 'rgba(15, 23, 42, 0.6)',
+                                border: '1px solid rgba(148, 163, 184, 0.25)',
+                                color: '#e2e8f0',
+                                fontSize: '0.85rem',
+                              }}
+                            >
+                              {classification.reason}
+                            </div>
+                          )}
+
+                          {isExpanded && classification && classification.breachedCheckpoints.length > 0 && (
+                            <div
+                              style={{
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '0.75rem',
+                                borderTop: '1px solid rgba(148, 163, 184, 0.2)',
+                                paddingTop: '0.75rem',
+                              }}
+                            >
+                              <div style={{ fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase' }}>
+                                Breached Checkpoints
+                              </div>
+                              {classification.breachedCheckpoints.map((checkpoint, idx) => (
+                                <div
+                                  key={idx}
+                                  style={{
+                                    padding: '0.75rem',
+                                    borderRadius: '0.65rem',
+                                    backgroundColor: 'rgba(15, 23, 42, 0.85)',
+                                    border: '1px solid rgba(239, 68, 68, 0.4)',
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      display: 'flex',
+                                      justifyContent: 'space-between',
+                                      alignItems: 'center',
+                                      marginBottom: '0.5rem',
+                                    }}
+                                  >
+                                    <span
+                                      style={{
+                                        fontWeight: 600,
+                                        fontSize: '0.85rem',
+                                        textTransform: 'capitalize',
+                                      }}
+                                    >
+                                      {checkpoint.checkpointType} • {checkpoint.location}
+                                    </span>
+                                    <span
+                                      style={{
+                                        fontSize: '0.7rem',
+                                        color: '#f87171',
+                                        letterSpacing: '0.08em',
+                                        textTransform: 'uppercase',
+                                      }}
+                                    >
+                                      Thresholds
+                                    </span>
+                                  </div>
+
+                                  <div
+                                    style={{
+                                      display: 'grid',
+                                      gap: '0.5rem',
+                                      gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                                      fontSize: '0.75rem',
+                                    }}
+                                  >
+                                    <div>
+                                      <p style={{ margin: 0, color: '#94a3b8' }}>Wind</p>
+                                      <p
+                                        style={{
+                                          margin: '0.25rem 0 0 0',
+                                          color: checkpoint.breaches.wind ? '#f87171' : '#34d399',
+                                        }}
+                                      >
+                                        {checkpoint.conditions.windSpeed} kt
+                                      </p>
+                                      <p style={{ margin: 0, color: '#475569', fontSize: '0.7rem' }}>
+                                        Max {checkpoint.thresholds.maxWind} kt
+                                      </p>
+                                    </div>
+                                    <div>
+                                      <p style={{ margin: 0, color: '#94a3b8' }}>Visibility</p>
+                                      <p
+                                        style={{
+                                          margin: '0.25rem 0 0 0',
+                                          color: checkpoint.breaches.visibility ? '#f87171' : '#34d399',
+                                        }}
+                                      >
+                                        {checkpoint.conditions.visibility} mi
+                                      </p>
+                                      <p style={{ margin: 0, color: '#475569', fontSize: '0.7rem' }}>
+                                        Min {checkpoint.thresholds.minVisibility} mi
+                                      </p>
+                                    </div>
+                                    <div>
+                                      <p style={{ margin: 0, color: '#94a3b8' }}>Ceiling</p>
+                                      <p
+                                        style={{
+                                          margin: '0.25rem 0 0 0',
+                                          color: checkpoint.breaches.ceiling ? '#f87171' : '#34d399',
+                                        }}
+                                      >
+                                        {checkpoint.conditions.ceiling === null
+                                          ? 'Unlimited'
+                                          : `${checkpoint.conditions.ceiling} ft`}
+                                      </p>
+                                      <p style={{ margin: 0, color: '#475569', fontSize: '0.7rem' }}>
+                                        Min {checkpoint.thresholds.minCeiling} ft
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {isExpanded && classification && (
+                            <Fragment>
+                              <div style={{ borderTop: '1px solid rgba(148, 163, 184, 0.25)' }} />
+                              <WeatherTimeline
+                                flightId={flight.id}
+                                departureTime={flight.departureTime}
+                                arrivalTime={flight.arrivalTime}
+                                thresholds={primaryThresholds}
+                              />
+                            </Fragment>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

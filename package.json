@@ -5,8 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "build": "wrangler deploy --dry-run",
-    "build:dashboard": "vite build",
+    "build": "vite build",
     "deploy": "wrangler deploy",
     "lint": "tsc --noEmit",
     "types": "wrangler types"

@@ -85,6 +85,8 @@ export function HistoricalWeatherView() {
         backgroundColor: '#ffffff',
         borderRadius: '0.5rem',
         border: '1px solid #e5e7eb',
+        color: '#1f2937',
+        boxShadow: '0 25px 55px -40px rgba(30, 64, 175, 0.35)',
       }}
     >
       <h2
@@ -123,6 +125,9 @@ export function HistoricalWeatherView() {
           >
             Flight ID
           </label>
+          <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.75rem', color: '#6b7280' }}>
+            Provide a specific flight to scope the query (required).
+          </p>
           <input
             id="flightId"
             type="number"
@@ -152,6 +157,9 @@ export function HistoricalWeatherView() {
           >
             Start Date
           </label>
+          <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.75rem', color: '#6b7280' }}>
+            Defaults to 7 days ago. Use the picker for precise ranges.
+          </p>
           <input
             id="startDate"
             type="date"
@@ -180,6 +188,9 @@ export function HistoricalWeatherView() {
           >
             End Date
           </label>
+          <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.75rem', color: '#6b7280' }}>
+            Must be after the start date; capped to the end of the selected day.
+          </p>
           <input
             id="endDate"
             type="date"
@@ -304,7 +315,7 @@ export function HistoricalWeatherView() {
                   <td style={{ padding: '0.75rem' }}>
                     {snapshot.ceiling !== null ? `${snapshot.ceiling} ft` : 'Unlimited'}
                   </td>
-                  <td style={{ padding: '0.75rem' }}>{snapshot.conditions}</td>
+                  <td style={{ padding: '0.75rem', color: '#1f2937' }}>{snapshot.conditions}</td>
                   <td style={{ padding: '0.75rem', fontSize: '0.75rem', color: '#6b7280' }}>
                     {formatRelativeTime(snapshot.created_at)}
                   </td>

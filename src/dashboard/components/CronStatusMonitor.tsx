@@ -4,7 +4,7 @@
  * Story 5.3: AC5 - Dashboard Component for Cron Status Monitoring
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRpc } from '../hooks/useRpc';
 import { ErrorAlert } from './ErrorAlert';
 import { LastRunSummaryCard } from './LastRunSummaryCard';
@@ -95,6 +95,40 @@ export function CronStatusMonitor() {
 
   const lastRun = cronRuns.length > 0 ? cronRuns[0] : null;
 
+  const trendSummary = useMemo(() => {
+    if (cronRuns.length === 0) {
+      return null;
+    }
+
+    let successStreak = 0;
+    for (const run of cronRuns) {
+      if (run.status === 'success') {
+        successStreak += 1;
+      } else {
+        break;
+      }
+    }
+
+    const lastIncidentRun = cronRuns.find((run) => run.status !== 'success') ?? null;
+
+    const now = Date.now();
+    const runsIn24h = cronRuns.filter(
+      (run) => now - new Date(run.completedAt).getTime() <= 24 * 60 * 60 * 1000
+    );
+    const failuresIn24h = runsIn24h.filter((run) => run.status !== 'success').length;
+    const averageDurationIn24h =
+      runsIn24h.length > 0
+        ? runsIn24h.reduce((acc, run) => acc + run.durationMs, 0) / runsIn24h.length
+        : null;
+
+    return {
+      successStreak,
+      failuresIn24h,
+      averageDurationIn24h,
+      lastIncidentRun,
+    };
+  }, [cronRuns]);
+
   return (
     <div className={styles.container}>
       <div className={styles.header}>
@@ -116,6 +150,7 @@ export function CronStatusMonitor() {
           formatDuration={formatDuration}
           formatRelativeTime={formatRelativeTime}
           getStatusColor={getStatusColor}
+          trendSummary={trendSummary}
         />
       )}
 

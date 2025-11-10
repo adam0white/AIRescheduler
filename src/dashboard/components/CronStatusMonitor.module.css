@@ -114,6 +114,39 @@
   gap: 0.75rem;
 }
 
+.trendBar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+}
+
+.trendLabel {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #94a3b8;
+  margin-bottom: 0.25rem;
+}
+
+.trendValue {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.trendValueWarning {
+  color: #f69c84;
+}
+
+.trendValueSuccess {
+  color: #34d399;
+}
+
 .statBox {
   padding: 0.75rem;
   border-radius: 0.375rem;
