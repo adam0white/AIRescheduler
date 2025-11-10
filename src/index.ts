@@ -7,6 +7,7 @@ import { createClient, getAllTrainingThresholds } from './db/client';
 import { handleRpc } from './rpc/handlers';
 import { generateCorrelationId, createContext } from './lib/logger';
 import { getAssetFromKV } from '@cloudflare/kv-asset-handler';
+import manifestJSON from '__STATIC_CONTENT_MANIFEST';
 import * as cronMonitoringService from './services/cron-monitoring-service';
 import * as cronOrchestration from './services/cron-orchestration';
 
@@ -16,6 +17,8 @@ export interface Env {
   WEATHER_API_KEY?: string;
   __STATIC_CONTENT: KVNamespace;
 }
+
+const assetManifest = JSON.parse(manifestJSON || '{}');
 
 export default {
   /**
@@ -77,7 +80,7 @@ export default {
         },
         {
           ASSET_NAMESPACE: env.__STATIC_CONTENT,
-          ASSET_MANIFEST: {},
+          ASSET_MANIFEST: assetManifest,
         }
       );
     } catch (e) {
