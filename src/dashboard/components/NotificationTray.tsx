@@ -34,6 +34,7 @@ export function NotificationTray() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [hoveredButtonId, setHoveredButtonId] = useState<number | null>(null);
   const trayRef = useRef<HTMLDivElement>(null);
 
   // Fetch notifications from RPC
@@ -346,21 +347,15 @@ export function NotificationTray() {
                       style={{
                         padding: '0.25rem 0.5rem',
                         fontSize: '0.75rem',
-                        backgroundColor: 'transparent',
-                        color: colors.blue,
+                        backgroundColor: hoveredButtonId === notification.id ? colors.blue : 'transparent',
+                        color: hoveredButtonId === notification.id ? '#fff' : colors.blue,
                         border: `1px solid ${colors.blue}`,
                         borderRadius: '0.25rem',
                         cursor: 'pointer',
                         transition: 'all 0.2s ease',
                       }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = colors.blue;
-                        e.currentTarget.style.color = '#fff';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = 'transparent';
-                        e.currentTarget.style.color = colors.blue;
-                      }}
+                      onMouseEnter={() => setHoveredButtonId(notification.id)}
+                      onMouseLeave={() => setHoveredButtonId(null)}
                     >
                       {notification.is_read ? 'Mark as unread' : 'Mark as read'}
                     </button>

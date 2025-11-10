@@ -95,23 +95,6 @@ function getSeverityFromType(type: string): 'low' | 'medium' | 'high' {
 }
 
 /**
- * Gets severity order for sorting (higher number = higher priority)
- * @param severity - Severity level
- * @returns Numeric order
- */
-function getSeverityOrder(severity: 'low' | 'medium' | 'high'): number {
-  switch (severity) {
-    case 'high':
-      return 3;
-    case 'medium':
-      return 2;
-    case 'low':
-    default:
-      return 1;
-  }
-}
-
-/**
  * Retrieves recent notifications from the database
  * @param ctx - Execution context
  * @param limit - Maximum number of notifications to return (default 10, max 50)
@@ -131,18 +114,28 @@ export async function getRecentNotifications(
     // Enforce max limit
     const safeLimit = Math.min(limit, 50);
 
-    // Build query with optional type filter
-    let query = `SELECT id, flight_id, type, message, status, created_at
-                 FROM notifications
-                 WHERE 1=1`;
+    // Build query with optional type filter and severity-based ordering
     const params: any[] = [];
+    let query = `SELECT id, flight_id, type, message, status, created_at
+                 FROM notifications`;
 
     if (type) {
-      query += ` AND type = ?`;
+      query += ' WHERE type = ?';
       params.push(type);
     }
 
-    query += ` ORDER BY created_at DESC LIMIT ?`;
+    // Sort by severity (high to low) then by created_at (newest first)
+    // Severity levels: cron-error/action-required/error = 3 (high)
+    //                  advisory = 2 (medium)
+    //                  auto-reschedule/info/others = 1 (low)
+    query += ` ORDER BY
+                 CASE
+                   WHEN type IN ('cron-error', 'action-required', 'error') THEN 3
+                   WHEN type = 'advisory' THEN 2
+                   ELSE 1
+                 END DESC,
+                 created_at DESC
+               LIMIT ?`;
     params.push(safeLimit);
 
     // Query notifications
@@ -167,13 +160,6 @@ export async function getRecentNotifications(
         created_at: row.created_at,
         flight_id: row.flight_id,
       };
-    });
-
-    // Sort by severity (high to low) then by created_at (newest first)
-    notifications.sort((a, b) => {
-      const severityDiff = getSeverityOrder(b.severity) - getSeverityOrder(a.severity);
-      if (severityDiff !== 0) return severityDiff;
-      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
 
     // Query unread count
