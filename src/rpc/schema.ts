@@ -331,6 +331,50 @@ export type CronRun = z.infer<typeof CronRunSchema>;
 export type GetCronRunsResponse = z.infer<typeof GetCronRunsResponseSchema>;
 
 // ========================================
+// GetRecentNotifications Method
+// ========================================
+
+export const GetRecentNotificationsRequestSchema = z.object({
+  limit: z.number().int().min(1).max(50).optional(), // Default: 10, Max: 50
+  type: z.enum(['auto-reschedule', 'auto-rescheduled', 'advisory', 'cron-error', 'action-required', 'info', 'error']).optional(),
+});
+
+export const NotificationSchema = z.object({
+  id: z.number(),
+  type: z.string(),
+  message: z.string(),
+  severity: z.enum(['low', 'medium', 'high']),
+  is_read: z.boolean(),
+  created_at: z.string(), // ISO 8601
+  flight_id: z.number().nullable(),
+});
+
+export const GetRecentNotificationsResponseSchema = z.object({
+  notifications: z.array(NotificationSchema),
+  totalCount: z.number(),
+});
+
+export type GetRecentNotificationsRequest = z.infer<typeof GetRecentNotificationsRequestSchema>;
+export type Notification = z.infer<typeof NotificationSchema>;
+export type GetRecentNotificationsResponse = z.infer<typeof GetRecentNotificationsResponseSchema>;
+
+// ========================================
+// UpdateNotificationStatus Method
+// ========================================
+
+export const UpdateNotificationStatusRequestSchema = z.object({
+  notificationId: z.number().int().positive(),
+  status: z.enum(['read', 'unread', 'archived']),
+});
+
+export const UpdateNotificationStatusResponseSchema = z.object({
+  success: z.boolean(),
+});
+
+export type UpdateNotificationStatusRequest = z.infer<typeof UpdateNotificationStatusRequestSchema>;
+export type UpdateNotificationStatusResponse = z.infer<typeof UpdateNotificationStatusResponseSchema>;
+
+// ========================================
 // GetFlightRescheduleHistory Method
 // ========================================
 
@@ -415,6 +459,14 @@ export const RpcMethodMap = {
   getCronRuns: {
     request: GetCronRunsRequestSchema,
     response: GetCronRunsResponseSchema,
+  },
+  getRecentNotifications: {
+    request: GetRecentNotificationsRequestSchema,
+    response: GetRecentNotificationsResponseSchema,
+  },
+  updateNotificationStatus: {
+    request: UpdateNotificationStatusRequestSchema,
+    response: UpdateNotificationStatusResponseSchema,
   },
 } as const;
 
